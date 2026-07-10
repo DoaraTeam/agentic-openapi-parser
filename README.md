@@ -456,6 +456,41 @@ the request/retry error handling.
 
 ---
 
+## 🔎 Semantic Tool Search
+
+`ToolFilterOptions` (see "Tool Filtering" above) is a *static* filter — the same rules
+apply to every request. Once a spec is large enough (100-200+ tools) that no single static filter
+serves every user intent well, `SemanticToolIndex` ranks tools by similarity to the specific query
+at hand instead:
+
+```ts
+import { SemanticToolIndex } from 'agentic-openapi-parser';
+
+// Bring your own embedding call — SemanticToolIndex has no opinion on which provider you use.
+const embeddingProvider = {
+  embed: async (texts: string[]) => {
+    const response = await openai.embeddings.create({ model: 'text-embedding-3-small', input: texts });
+    return response.data.map((d) => d.embedding);
+  },
+};
+
+const { tools } = await agent.parseAndFlatten('https://api.example.com/openapi.json');
+const index = new SemanticToolIndex(embeddingProvider);
+await index.build(tools); // embeds every tool once
+
+const relevantTools = await index.search('refund a customer payment', 10); // top 10 by cosine similarity
+const adapter = new LangchainToolAdapter(agent.getExecutor(), spec, relevantTools);
+```
+
+`SemanticToolIndex` deliberately never calls an embedding API itself — `EmbeddingProvider` is the
+same bring-your-own-X pattern used for OAuth2 tokens and response processors, so this library isn't
+hard-wired to OpenAI, Cohere, or any specific model. It owns only what's genuinely fiddly to get
+right: embedding each tool exactly once, and ranking many `search()` calls against that index by
+cosine similarity without re-embedding anything. By default each tool is embedded as
+`"name description tag1 tag2 ..."` — pass `buildText` to customize that.
+
+---
+
 ## 🔒 Security & Logging
 
 This library implements robust safety checks:
