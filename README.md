@@ -221,6 +221,28 @@ body shows up in the generated tool schema as a `requestBody` field alongside th
 
 ---
 
+## 🧰 Tool Filtering
+
+Large specs (Stripe, GitHub, ...) can flatten into hundreds of tools, which hurts LLM tool-selection
+accuracy well before it hits any provider limit. Pass a `ToolFilterOptions` as the third argument to
+`parseAndFlatten()` to keep only the tools you actually want to expose:
+
+```ts
+const { tools } = await agent.parseAndFlatten('https://api.example.com/openapi.json', 'stripe', {
+  includeTags: ['payments', 'customers'],   // keep only these OpenAPI tags
+  excludeOperationIds: ['admin*'],          // glob against the derived tool name
+  excludePaths: ['/internal/**'],           // glob against the OpenAPI path template
+});
+```
+
+All four dimensions (`includeTags`/`excludeTags`, `includeOperationIds`/`excludeOperationIds`,
+`includePaths`/`excludePaths`) are optional and combine with AND semantics — a tool must pass every
+filter you specify. `include*` uses OR-within-dimension (any pattern matching is enough), `exclude*`
+drops a tool if any pattern matches. Patterns support `*` (single path segment), `**` (any number of
+segments), and `?` (single character).
+
+---
+
 ## 🔒 Security & Logging
 
 This library implements robust safety checks:

@@ -1,16 +1,21 @@
 import SwaggerParser from '@apidevtools/swagger-parser';
 import { DynamicToolDefinition, ILogger } from '@/types';
 import type { IOpenApiParserService } from '@/services';
-import { DEFAULT_LOGGER, deriveToolName, iterateOperations } from '@/utils';
+import type { ToolFilterOptions } from '@/utils';
+import { DEFAULT_LOGGER, deriveToolName, filterTools, iterateOperations } from '@/utils';
 
 export class OpenApiParserService implements IOpenApiParserService {
   constructor(private readonly logger: ILogger = DEFAULT_LOGGER) {}
 
-  async parseAndFlatten(apiSpecUrl: string, providerId?: string): Promise<{ document: Record<string, unknown>, tools: DynamicToolDefinition[] }> {
+  async parseAndFlatten(apiSpecUrl: string, providerId?: string, filter?: ToolFilterOptions): Promise<{ document: Record<string, unknown>, tools: DynamicToolDefinition[] }> {
     this.logger.log(`Parsing OpenAPI spec from: ${apiSpecUrl}`);
     try {
       const document = await SwaggerParser.dereference(apiSpecUrl) as Record<string, unknown>;
-      const tools = this.extractToolsFromSpec(document, providerId);
+      const allTools = this.extractToolsFromSpec(document, providerId);
+      const tools = filterTools(allTools, filter);
+      if (filter && tools.length !== allTools.length) {
+        this.logger.log(`Tool filter kept ${tools.length}/${allTools.length} tools.`);
+      }
       return { document, tools };
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : String(error);

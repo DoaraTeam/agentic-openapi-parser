@@ -8,6 +8,7 @@ import {
 } from '@/services';
 import { ILogger, DynamicToolDefinition, ExecuteToolOptions } from '@/types';
 import { DEFAULT_LOGGER } from '@/utils';
+import type { ToolFilterOptions } from '@/utils';
 
 // Re-exported from root: none of these need an optional peer dependency (only axios/pino/
 // swagger-parser, all regular dependencies), so there's no reason to force consumers through
@@ -50,8 +51,8 @@ export class DynamicOpenApiAgent {
   /**
    * Parse an OpenAPI specification from a URL and extract its tools.
    */
-  async parseAndFlatten(apiSpecUrl: string, providerId?: string): Promise<{ document: Record<string, unknown>; tools: DynamicToolDefinition[] }> {
-    return this.parser.parseAndFlatten(apiSpecUrl, providerId);
+  async parseAndFlatten(apiSpecUrl: string, providerId?: string, filter?: ToolFilterOptions): Promise<{ document: Record<string, unknown>; tools: DynamicToolDefinition[] }> {
+    return this.parser.parseAndFlatten(apiSpecUrl, providerId, filter);
   }
 
   /**

@@ -103,4 +103,24 @@ describe('OpenApiParserService', () => {
     expect(result.tools?.[0]?.requestBodySchema).toBeUndefined();
     expect(result.tools?.[0]?.tags).toBeUndefined();
   });
+
+  it('should apply a tool filter to the extracted tools', async () => {
+    const mockSpec = {
+      paths: {
+        '/pets': {
+          get: { operationId: 'getPets', tags: ['pets'] },
+        },
+        '/admin/reset': {
+          post: { operationId: 'resetDb', tags: ['admin'] },
+        },
+      },
+    };
+
+    (SwaggerParser.dereference as jest.Mock).mockResolvedValue(mockSpec);
+
+    const result = await service.parseAndFlatten('http://fake-url.com', undefined, { excludeTags: ['admin'] });
+
+    expect(result.tools).toHaveLength(1);
+    expect(result.tools?.[0]?.name).toBe('getPets');
+  });
 });
