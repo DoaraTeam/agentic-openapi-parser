@@ -175,4 +175,77 @@ describe('DynamicToolExecutorService', () => {
       undefined
     );
   });
+
+  describe('retry', () => {
+    const mockSpec = {
+      servers: [{ url: 'https://api.example.com' }],
+      paths: { '/users': { get: { operationId: 'getUsers' } } },
+    };
+
+    it('does not retry by default, even on a retryable status code', async () => {
+      const error = { response: { status: 503, data: 'Service Unavailable' }, config: {} };
+      (axios as unknown as jest.Mock).mockRejectedValue(error);
+
+      await expect(service.execute(mockSpec, 'getUsers', {})).rejects.toThrow(/Status 503/);
+      expect(axios).toHaveBeenCalledTimes(1);
+    });
+
+    it('retries a retryable status code up to maxRetries, then succeeds', async () => {
+      const error = { response: { status: 503, data: 'Service Unavailable' }, config: {} };
+      (axios as unknown as jest.Mock)
+        .mockRejectedValueOnce(error)
+        .mockRejectedValueOnce(error)
+        .mockResolvedValueOnce({ data: { ok: true } });
+
+      const result = await service.execute(mockSpec, 'getUsers', {}, { retry: { maxRetries: 2, retryDelayMs: 1 } });
+
+      expect(result).toEqual({ ok: true });
+      expect(axios).toHaveBeenCalledTimes(3);
+    });
+
+    it('gives up after exhausting maxRetries', async () => {
+      const error = { response: { status: 503, data: 'Service Unavailable' }, config: {} };
+      (axios as unknown as jest.Mock).mockRejectedValue(error);
+
+      await expect(service.execute(mockSpec, 'getUsers', {}, { retry: { maxRetries: 2, retryDelayMs: 1 } })).rejects.toThrow(/Status 503/);
+      expect(axios).toHaveBeenCalledTimes(3);
+    });
+
+    it('does not retry a non-retryable status code even with maxRetries set', async () => {
+      const error = { response: { status: 400, data: 'Bad Request' }, config: {} };
+      (axios as unknown as jest.Mock).mockRejectedValue(error);
+
+      await expect(service.execute(mockSpec, 'getUsers', {}, { retry: { maxRetries: 3, retryDelayMs: 1 } })).rejects.toThrow(/Status 400/);
+      expect(axios).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('concurrency', () => {
+    it('caps concurrent requests through this executor instance', async () => {
+      const mockSpec = {
+        servers: [{ url: 'https://api.example.com' }],
+        paths: { '/users': { get: { operationId: 'getUsers' } } },
+      };
+
+      let active = 0;
+      let maxActive = 0;
+      (axios as unknown as jest.Mock).mockImplementation(async () => {
+        active++;
+        maxActive = Math.max(maxActive, active);
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        active--;
+        return { data: { ok: true } };
+      });
+
+      const limitedService = new DynamicToolExecutorService(
+        mockSecurityInjector,
+        { log: jest.fn(), error: jest.fn(), warn: jest.fn(), debug: jest.fn() },
+        { maxConcurrency: 2 }
+      );
+
+      await Promise.all(Array.from({ length: 5 }, () => limitedService.execute(mockSpec, 'getUsers', {})));
+
+      expect(maxActive).toBeLessThanOrEqual(2);
+    });
+  });
 });

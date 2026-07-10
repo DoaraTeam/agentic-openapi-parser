@@ -42,6 +42,17 @@ export interface TokenRefresher {
   refreshIfNeeded(state: OAuth2TokenState): Promise<OAuth2TokenState | undefined>;
 }
 
+export interface RetryOptions {
+  /** Number of retry attempts after the initial call. Default 0 (no retry). */
+  maxRetries?: number;
+  /** Base delay in ms for exponential backoff (attempt 0 waits up to this long). Default 300. */
+  retryDelayMs?: number;
+  /** HTTP status codes worth retrying. Default [408, 429, 500, 502, 503, 504]. */
+  retryableStatusCodes?: number[];
+  /** Whether to retry when the request fails with no HTTP response at all (timeout, DNS, reset). Default true. */
+  retryOnNetworkError?: boolean;
+}
+
 export interface ExecuteToolOptions {
   authType?: DynamicProviderAuthType;
   accessToken?: string;
@@ -49,6 +60,7 @@ export interface ExecuteToolOptions {
   responseProcessors?: ResponseProcessor[];
   tokenRefresher?: TokenRefresher;
   oauth2State?: OAuth2TokenState;
+  retry?: RetryOptions;
 }
 
 export interface IAiAdapter<TTool = unknown, TReturnType = TTool[]> {

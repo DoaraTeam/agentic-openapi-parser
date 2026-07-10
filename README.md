@@ -243,6 +243,45 @@ segments), and `?` (single character).
 
 ---
 
+## 🔁 Retry, Timeout & Concurrency
+
+Third-party APIs are flaky. Three independent knobs handle this without any extra dependency:
+
+- **Per-call timeout** — `options.timeout` (ms) on `executeTool()`/`execute()`, already scoped to a
+  single tool call so different endpoints on the same provider can use different budgets.
+- **Retry with backoff** — `options.retry` on the same call:
+
+  ```ts
+  await agent.executeTool(spec, 'getInvoice', args, {
+    retry: {
+      maxRetries: 3,               // default 0 (no retry)
+      retryDelayMs: 300,           // base delay; exponential backoff with full jitter
+      retryableStatusCodes: [408, 429, 500, 502, 503, 504], // this is the default
+      retryOnNetworkError: true,   // retry when there's no HTTP response at all
+    },
+  });
+  ```
+
+  Only retries idempotent-looking failures (timeouts, 429/5xx, connection resets) — a 4xx client
+  error fails immediately, no retry.
+
+- **Concurrency limit** — a policy for the *executor instance* rather than a single call, since it
+  protects one provider's API from a burst of parallel tool calls (e.g. an LLM turn requesting 20
+  tools at once):
+
+  ```ts
+  import { DynamicToolExecutorService, OpenApiSecurityInjector } from 'agentic-openapi-parser';
+
+  const executor = new DynamicToolExecutorService(new OpenApiSecurityInjector(logger), logger, {
+    maxConcurrency: 5, // extra calls queue instead of firing all at once
+  });
+  ```
+
+  Pass this executor into `DynamicOpenApiAgent`'s constructor overrides (see
+  [Overriding facade pieces](#overriding-facade-pieces)) to wire it into the facade.
+
+---
+
 ## 🔒 Security & Logging
 
 This library implements robust safety checks:

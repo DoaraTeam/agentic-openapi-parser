@@ -1,13 +1,26 @@
-import axios, { AxiosRequestConfig } from 'axios';
-import { ExecuteToolOptions, ILogger, ResponseProcessor } from '@/types';
+import axios, { AxiosError, AxiosRequestConfig, AxiosResponse } from 'axios';
+import { ExecuteToolOptions, ILogger, ResponseProcessor, RetryOptions } from '@/types';
 import type { IDynamicToolExecutorService, IOpenApiSecurityInjector } from '@/services';
-import { DEFAULT_LOGGER, findOperationByToolName } from '@/utils';
+import { ConcurrencyLimiter, DEFAULT_LOGGER, findOperationByToolName } from '@/utils';
+import { RetryPolicy } from './retry-policy';
+
+export interface DynamicToolExecutorServiceOptions {
+  /** Caps how many requests this executor instance sends concurrently; extra calls queue. Unset = unlimited. */
+  maxConcurrency?: number;
+}
 
 export class DynamicToolExecutorService implements IDynamicToolExecutorService {
+  private readonly concurrencyLimiter?: ConcurrencyLimiter;
+
   constructor(
     private readonly securityInjector: IOpenApiSecurityInjector,
-    private readonly logger: ILogger = DEFAULT_LOGGER
-  ) {}
+    private readonly logger: ILogger = DEFAULT_LOGGER,
+    executorOptions?: DynamicToolExecutorServiceOptions
+  ) {
+    if (executorOptions?.maxConcurrency) {
+      this.concurrencyLimiter = new ConcurrencyLimiter(executorOptions.maxConcurrency);
+    }
+  }
 
   async execute(
     spec: Record<string, unknown>,
@@ -52,11 +65,35 @@ export class DynamicToolExecutorService implements IDynamicToolExecutorService {
     };
 
     try {
-      const response = await axios(reqConfig);
+      const send = () => this.sendWithRetry(reqConfig, toolName, options?.retry);
+      const response = this.concurrencyLimiter ? await this.concurrencyLimiter.run(send) : await send();
       return this.applyResponseProcessors(response.data, options?.responseProcessors);
     } catch (error: unknown) {
       this.handleExecutionError(error);
     }
+  }
+
+  private async sendWithRetry(reqConfig: AxiosRequestConfig, toolName: string, retryOptions?: RetryOptions): Promise<AxiosResponse> {
+    const policy = new RetryPolicy(retryOptions);
+    let attempt = 0;
+
+    for (;;) {
+      try {
+        return await axios(reqConfig);
+      } catch (error: unknown) {
+        const statusCode = (error as AxiosError).response?.status;
+        if (!policy.shouldRetry(attempt, statusCode)) throw error;
+
+        const delayMs = policy.delayFor(attempt);
+        this.logger.warn(`Tool "${toolName}" attempt ${attempt + 1} failed (status ${statusCode ?? 'network error'}), retrying in ${Math.round(delayMs)}ms`);
+        await this.sleep(delayMs);
+        attempt++;
+      }
+    }
+  }
+
+  private sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
   private applyResponseProcessors(data: unknown, processors?: ResponseProcessor[]): unknown {
