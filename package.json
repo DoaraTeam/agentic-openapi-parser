@@ -32,10 +32,10 @@
     "tools",
     "typescript"
   ],
-  "author": "Your Name <your.email@example.com>",
+  "author": "Thuy Phuoc Thinh <thuyphuocthinhtpt1@gmail.com>",
   "repository": {
     "type": "git",
-    "url": "https://github.com/your-username/agentic-openapi-parser.git"
+    "url": "https://github.com/DoaraTeam/agentic-openapi-parser.git"
   },
   "files": [
     "dist"
