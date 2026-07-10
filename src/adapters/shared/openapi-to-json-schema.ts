@@ -23,7 +23,7 @@ export function sanitizeJsonSchema(schema: unknown): unknown {
   if (result.type === 'file') {
     result.type = 'string';
     delete result.format;
-    result.description = result.description ? `${result.description} (Base64 Encoded Binary Data)` : '(Base64 Encoded Binary Data)';
+    result.description = result.description ? `${result.description} (Base64 Encoded Binary Data)` : 'Base64 Encoded Binary Data';
   }
 
   delete result.default;

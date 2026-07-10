@@ -11,7 +11,7 @@ describe('sanitizeJsonSchema', () => {
 
   it('sets a default description when type: file has none', () => {
     const result = sanitizeJsonSchema({ type: 'file' }) as Record<string, unknown>;
-    expect(result.description).toBe('(Base64 Encoded Binary Data)');
+    expect(result.description).toBe('Base64 Encoded Binary Data');
   });
 
   it('strips default/example/examples/pattern/minLength/maxLength/minimum/maximum', () => {
