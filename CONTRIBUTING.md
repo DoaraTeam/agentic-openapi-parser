@@ -18,6 +18,31 @@ pnpm build
 All four of `lint`, `typecheck`, `test`, and `build` must pass before a PR can merge — CI
 runs them on every push and pull request.
 
+A git `pre-commit` hook (via husky, installed automatically by `pnpm install`'s `prepare`
+script) runs `typecheck`, `lint`, and `test` on every commit — a commit is rejected if any of
+them fail, including on unused/dead imports (`@typescript-eslint/no-unused-vars` is an error,
+not a warning). There's no way to skip this locally except `git commit --no-verify`, which
+should not be used routinely.
+
+## Commit messages
+
+Commit messages must follow [Conventional Commits](https://www.conventionalcommits.org/)
+(`feat: ...`, `fix: ...`, `refactor: ...`, `test: ...`, `docs: ...`, `chore: ...`), enforced by
+a `commit-msg` hook via commitlint. Examples already in this repo's history:
+
+```
+feat: add MCP adapter (McpToolAdapter)
+fix: match slack-be's exact description text for type:file with no prior description
+refactor: restructure services/ by domain instead of by layer
+test: add security-injector parity cases matching slack-be orchestration
+```
+
+## Publishing
+
+`npm publish` only runs from the `main` branch — a `prepublishOnly` script
+(`scripts/assert-main-branch.js`) checks the current branch and aborts otherwise. Merge to
+`main` before publishing a new version.
+
 ## Adding a new AI adapter (e.g. OpenAI, Anthropic, MCP)
 
 1. Create `src/adapters/<name>/<name>.adapter.ts`.
