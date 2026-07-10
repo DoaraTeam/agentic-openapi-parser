@@ -7,7 +7,7 @@ export class LangchainToolAdapter extends BaseAiAdapter<DynamicStructuredTool, D
       return new DynamicStructuredTool({
         name: this.safeToolName(toolDef.name),
         description: toolDef.description || `Tool for ${toolDef.name}`,
-        schema: this.buildSchema(toolDef.parameters),
+        schema: this.buildSchema(toolDef),
         func: async (args: Record<string, unknown>) => {
           const result = await this.run(toolDef.name, args);
           return JSON.stringify(result);

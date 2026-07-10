@@ -1,7 +1,8 @@
 import { z } from 'zod';
 import { DynamicToolDefinition, ExecuteToolOptions, IAiAdapter } from '@/types';
 import { IDynamicToolExecutorService } from '@/services';
-import { buildZodSchemaFromParameters } from './openapi-to-zod';
+import { buildZodSchemaForTool } from './openapi-to-zod';
+import { safeToolName as sanitizeToolName } from './tool-name';
 
 /**
  * Shared plumbing for AI-framework adapters (Langchain, Vercel AI, ...).
@@ -16,11 +17,11 @@ export abstract class BaseAiAdapter<TTool, TReturnType> implements IAiAdapter<TT
   ) {}
 
   protected safeToolName(name: string): string {
-    return name.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 64);
+    return sanitizeToolName(name);
   }
 
-  protected buildSchema(parameters: Record<string, unknown>[]): z.ZodTypeAny {
-    return buildZodSchemaFromParameters(parameters);
+  protected buildSchema(toolDef: DynamicToolDefinition): z.ZodTypeAny {
+    return buildZodSchemaForTool(toolDef);
   }
 
   protected async run(toolName: string, args: Record<string, unknown>): Promise<unknown> {

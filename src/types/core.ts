@@ -14,6 +14,9 @@ export interface DynamicToolDefinition {
   parameters: Record<string, unknown>[];
   security?: Record<string, unknown>[];
   providerId?: string;
+  requestBodySchema?: Record<string, unknown>;
+  requestBodyRequired?: boolean;
+  tags?: string[];
 }
 
 export interface ExecuteToolOptions {

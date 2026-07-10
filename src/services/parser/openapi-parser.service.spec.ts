@@ -53,4 +53,54 @@ describe('OpenApiParserService', () => {
 
     await expect(service.parseAndFlatten('http://fake-url.com')).rejects.toThrow('Failed to parse OpenAPI spec: Network Error');
   });
+
+  it('should extract requestBody schema and tags from an OpenAPI 3 operation', async () => {
+    const mockSpec = {
+      paths: {
+        '/users': {
+          post: {
+            operationId: 'createUser',
+            tags: ['users'],
+            requestBody: {
+              required: true,
+              content: {
+                'application/json': {
+                  schema: { type: 'object', properties: { name: { type: 'string' } }, required: ['name'] },
+                },
+              },
+            },
+          },
+        },
+      },
+    };
+
+    (SwaggerParser.dereference as jest.Mock).mockResolvedValue(mockSpec);
+
+    const result = await service.parseAndFlatten('http://fake-url.com');
+
+    expect(result.tools?.[0]?.tags).toEqual(['users']);
+    expect(result.tools?.[0]?.requestBodyRequired).toBe(true);
+    expect(result.tools?.[0]?.requestBodySchema).toEqual({
+      type: 'object',
+      properties: { name: { type: 'string' } },
+      required: ['name'],
+    });
+  });
+
+  it('should leave requestBodySchema/tags undefined when the operation has no requestBody', async () => {
+    const mockSpec = {
+      paths: {
+        '/pets': {
+          get: { operationId: 'getPets' },
+        },
+      },
+    };
+
+    (SwaggerParser.dereference as jest.Mock).mockResolvedValue(mockSpec);
+
+    const result = await service.parseAndFlatten('http://fake-url.com');
+
+    expect(result.tools?.[0]?.requestBodySchema).toBeUndefined();
+    expect(result.tools?.[0]?.tags).toBeUndefined();
+  });
 });

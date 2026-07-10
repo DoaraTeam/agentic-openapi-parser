@@ -9,7 +9,7 @@ export class VercelAiAdapter extends BaseAiAdapter<unknown, Record<string, unkno
       const createToolFn = createTool as unknown as (config: Record<string, unknown>) => unknown;
       toolsMap[this.safeToolName(toolDef.name)] = createToolFn({
         description: toolDef.description || `Tool for ${toolDef.name}`,
-        parameters: this.buildSchema(toolDef.parameters),
+        parameters: this.buildSchema(toolDef),
         execute: async (args: unknown) => {
           return this.run(toolDef.name, args as Record<string, unknown>);
         },

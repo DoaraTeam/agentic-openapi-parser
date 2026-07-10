@@ -24,6 +24,7 @@ export class OpenApiParserService implements IOpenApiParserService {
 
     for (const { path, method, operation } of iterateOperations(spec)) {
       const toolName = deriveToolName(method, path, operation.operationId as string | undefined);
+      const { schema: requestBodySchema, required: requestBodyRequired } = this.extractRequestBody(operation);
 
       tools.push({
         name: toolName,
@@ -33,10 +34,26 @@ export class OpenApiParserService implements IOpenApiParserService {
         parameters: (operation.parameters as Record<string, unknown>[]) || [],
         security: (operation.security || spec.security) as Record<string, unknown>[] | undefined,
         providerId,
+        requestBodySchema,
+        requestBodyRequired,
+        tags: (operation.tags as string[]) || undefined,
       });
     }
 
     this.logger.log(`Extracted ${tools.length} tools from spec.`);
     return tools;
+  }
+
+  private extractRequestBody(operation: Record<string, unknown>): { schema?: Record<string, unknown>; required?: boolean } {
+    const requestBody = operation.requestBody as Record<string, unknown> | undefined;
+    if (!requestBody) return {};
+
+    const content = (requestBody.content as Record<string, Record<string, unknown>>) || {};
+    const mediaType = content['application/json'] || Object.values(content)[0];
+
+    return {
+      schema: mediaType?.schema as Record<string, unknown> | undefined,
+      required: (requestBody.required as boolean) || false,
+    };
   }
 }
