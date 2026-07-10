@@ -9,6 +9,15 @@ import {
 import { ILogger, DynamicToolDefinition, ExecuteToolOptions } from '@/types';
 import { DEFAULT_LOGGER } from '@/utils';
 
+// Re-exported from root: none of these need an optional peer dependency (only axios/pino/
+// swagger-parser, all regular dependencies), so there's no reason to force consumers through
+// '/services', '/types', '/utils' subpaths just to use them. Only the adapter subpaths
+// (nestjs/langchain/vercel-ai/mcp/shared) genuinely need isolation, since each pulls a different
+// optional peer dependency.
+export * from '@/services';
+export * from '@/types';
+export * from '@/utils';
+
 export interface DynamicOpenApiAgentOverrides {
   parser?: IOpenApiParserService;
   securityInjector?: IOpenApiSecurityInjector;
