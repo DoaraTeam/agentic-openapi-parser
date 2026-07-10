@@ -1,6 +1,19 @@
-import { OpenApiParserService, OpenApiSecurityInjector, DynamicToolExecutorService } from '@/services';
+import {
+  OpenApiParserService,
+  OpenApiSecurityInjector,
+  DynamicToolExecutorService,
+  IOpenApiParserService,
+  IOpenApiSecurityInjector,
+  IDynamicToolExecutorService,
+} from '@/services';
 import { ILogger, DynamicToolDefinition, ExecuteToolOptions } from '@/types';
 import { DEFAULT_LOGGER } from '@/utils';
+
+export interface DynamicOpenApiAgentOverrides {
+  parser?: IOpenApiParserService;
+  securityInjector?: IOpenApiSecurityInjector;
+  executor?: IDynamicToolExecutorService;
+}
 
 /**
  * Main entry point for the Dynamic OpenAPI Agent.
@@ -8,20 +21,20 @@ import { DEFAULT_LOGGER } from '@/utils';
  * for vanilla TypeScript/JavaScript usage.
  */
 export class DynamicOpenApiAgent {
-  private parser: OpenApiParserService;
-  private securityInjector: OpenApiSecurityInjector;
-  private executor: DynamicToolExecutorService;
+  private parser: IOpenApiParserService;
+  private securityInjector: IOpenApiSecurityInjector;
+  private executor: IDynamicToolExecutorService;
 
-  constructor(logger: ILogger = DEFAULT_LOGGER) {
-    this.parser = new OpenApiParserService(logger);
-    this.securityInjector = new OpenApiSecurityInjector(logger);
-    this.executor = new DynamicToolExecutorService(this.securityInjector, logger);
+  constructor(logger: ILogger = DEFAULT_LOGGER, overrides: DynamicOpenApiAgentOverrides = {}) {
+    this.securityInjector = overrides.securityInjector ?? new OpenApiSecurityInjector(logger);
+    this.parser = overrides.parser ?? new OpenApiParserService(logger);
+    this.executor = overrides.executor ?? new DynamicToolExecutorService(this.securityInjector, logger);
   }
 
   /**
    * Get the underlying tool executor service.
    */
-  getExecutor(): DynamicToolExecutorService {
+  getExecutor(): IDynamicToolExecutorService {
     return this.executor;
   }
 

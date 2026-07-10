@@ -188,5 +188,63 @@ This library implements robust safety checks:
 - **Token Masking:** Securely masks API keys and Bearer tokens in logs (`Bearer my-s******oken`) to prevent credential leakage.
 - **Strict Null Checks:** Enforces strict array and object indexing to prevent runtime crashes from malformed specs.
 
+---
+
+## 🧩 Extending
+
+The library is built around small, swappable pieces. See [CONTRIBUTING.md](./CONTRIBUTING.md) for the
+full walkthrough — the short version:
+
+### Custom auth strategy
+
+Security injection is a registry of `ISecurityStrategy` implementations keyed by OpenAPI
+`securityScheme.type` (`apiKey`, `http`, `oauth2`, `basic`, ...). Add your own without touching the
+built-in ones:
+
+```typescript
+import { OpenApiSecurityInjector, SecurityStrategyRegistry, createDefaultSecurityStrategyRegistry } from 'agentic-openapi/services';
+
+class HmacSignatureStrategy /* implements ISecurityStrategy */ {
+  schemeTypes = ['x-hmac'];
+  supportsAuthType() { return true; }
+  inject({ headers, accessToken }) {
+    headers['X-Signature'] = signRequest(accessToken);
+    return true;
+  }
+}
+
+const registry = createDefaultSecurityStrategyRegistry().register(new HmacSignatureStrategy());
+const securityInjector = new OpenApiSecurityInjector(logger, registry);
+```
+
+### Custom AI adapter
+
+This is for contributors adding a new adapter inside the repo (see CONTRIBUTING.md) — extend
+`BaseAiAdapter` (`src/adapters/shared/base-ai-adapter.ts`) to add support for another framework;
+it already gives you schema generation, safe tool naming, and executor wiring:
+
+```typescript
+import { BaseAiAdapter } from '@/adapters/shared';
+
+class MyFrameworkAdapter extends BaseAiAdapter<MyToolShape, MyToolShape[]> {
+  getTools() {
+    return this.toolsDef.map((toolDef) => ({
+      name: this.safeToolName(toolDef.name),
+      schema: this.buildSchema(toolDef.parameters),
+      execute: (args) => this.run(toolDef.name, args),
+    }));
+  }
+}
+```
+
+### Overriding facade pieces
+
+`DynamicOpenApiAgent` accepts optional service overrides as a second constructor argument, so you
+can swap in a custom parser/injector/executor without bypassing the facade:
+
+```typescript
+const agent = new DynamicOpenApiAgent(logger, { securityInjector });
+```
+
 ## License
 MIT
