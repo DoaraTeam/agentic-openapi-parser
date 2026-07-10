@@ -411,6 +411,51 @@ wins — they model different grant types and aren't meant to be combined on the
 
 ---
 
+## ✂️ Response Shaping
+
+Two composable `ResponseProcessor`s (same pipeline as `TruncateResponseProcessor`) address the two
+distinct causes of oversized tool responses:
+
+**`JmesPathSelectProcessor`** — pick out / reshape only the fields the LLM actually needs, using a
+[JMESPath](https://jmespath.org) expression:
+
+```ts
+import { JmesPathSelectProcessor } from 'agentic-openapi-parser';
+
+await agent.executeTool(spec, 'listOrders', args, {
+  responseProcessors: [new JmesPathSelectProcessor('orders[*].{id: id, total: total, status: status}')],
+});
+```
+
+JMESPath, not JSONPath, on purpose: it's a fully declarative query language with no script/filter
+syntax that can evaluate arbitrary code — this matters because the expression may end up coming
+from semi-trusted, caller-supplied config rather than only from a developer's own source. A
+malformed expression throws immediately (it's a configuration bug, not a transient failure) rather
+than silently passing the response through unshaped.
+
+**`MaxBytesResponseProcessor`** — a last-resort cap on the total serialized response size,
+independent of `TruncateResponseProcessor` (which bounds individual strings/arrays, not the whole
+payload):
+
+```ts
+import { MaxBytesResponseProcessor } from 'agentic-openapi-parser';
+
+await agent.executeTool(spec, 'getReport', args, {
+  responseProcessors: [new MaxBytesResponseProcessor(50 * 1024)], // default is 50 KB
+});
+```
+
+Over the limit, it returns `{ truncated: true, originalSizeBytes, maxBytes, preview }` instead of
+the raw value — `preview` is cut at a byte-accurate boundary that never splits a multi-byte UTF-8
+character. Order processors deliberately: put `JmesPathSelectProcessor` first to shrink the payload
+semantically, `MaxBytesResponseProcessor` last as the final safety net.
+
+A processor that throws (a bad JMESPath expression, a bug in your own custom processor) surfaces as
+its own error — it is never mislabeled as a failed HTTP request, since post-processing runs outside
+the request/retry error handling.
+
+---
+
 ## 🔒 Security & Logging
 
 This library implements robust safety checks:

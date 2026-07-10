@@ -67,13 +67,18 @@ export class DynamicToolExecutorService implements IDynamicToolExecutorService {
         timeout: options?.timeout || 15000,
     };
 
+    let response: AxiosResponse;
     try {
       const send = () => this.sendWithRetry(reqConfig, toolName, options?.retry);
-      const response = this.concurrencyLimiter ? await this.concurrencyLimiter.run(send) : await send();
-      return this.applyResponseProcessors(response.data, options?.responseProcessors);
+      response = this.concurrencyLimiter ? await this.concurrencyLimiter.run(send) : await send();
     } catch (error: unknown) {
       this.handleExecutionError(error);
     }
+
+    // Deliberately outside the try/catch above: a ResponseProcessor failure (e.g. a malformed
+    // JMESPath expression) is a caller configuration bug, not a failed HTTP request, and must not
+    // be reported through handleExecutionError's Axios-error-shaped formatting.
+    return this.applyResponseProcessors(response.data, options?.responseProcessors);
   }
 
   private async sendWithRetry(reqConfig: AxiosRequestConfig, toolName: string, retryOptions?: RetryOptions): Promise<AxiosResponse> {

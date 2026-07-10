@@ -99,6 +99,24 @@ describe('DynamicToolExecutorService', () => {
     expect(result).toEqual({ untouched: true });
   });
 
+  it('propagates a responseProcessor failure as its own error, not as a masked "API Request Failed"', async () => {
+    const mockSpec = {
+      servers: [{ url: 'https://api.example.com' }],
+      paths: { '/users': { get: { operationId: 'getUsers' } } },
+    };
+    (axios as unknown as jest.Mock).mockResolvedValue({ data: { ok: true } });
+
+    const throwingProcessor = {
+      process: jest.fn(() => {
+        throw new Error('Invalid JMESPath expression');
+      }),
+    };
+
+    await expect(
+      service.execute(mockSpec, 'getUsers', {}, { responseProcessors: [throwingProcessor] })
+    ).rejects.toThrow('Invalid JMESPath expression');
+  });
+
   it('refreshes the token via tokenRefresher before injecting security, and uses the new token', async () => {
     const mockSpec = {
       servers: [{ url: 'https://api.example.com' }],
