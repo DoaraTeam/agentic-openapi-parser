@@ -176,6 +176,54 @@ describe('DynamicToolExecutorService', () => {
     );
   });
 
+  describe('accessTokenProvider', () => {
+    const mockSpec = {
+      servers: [{ url: 'https://api.example.com' }],
+      paths: { '/users': { get: { operationId: 'getUsers' } } },
+    };
+
+    it('uses the token returned by accessTokenProvider for security injection', async () => {
+      (axios as unknown as jest.Mock).mockResolvedValue({ data: { ok: true } });
+      const accessTokenProvider = { getAccessToken: jest.fn().mockResolvedValue('client-credentials-token') };
+
+      await service.execute(mockSpec, 'getUsers', {}, { accessTokenProvider });
+
+      expect(accessTokenProvider.getAccessToken).toHaveBeenCalledTimes(1);
+      expect(mockSecurityInjector.inject).toHaveBeenCalledWith(
+        mockSpec,
+        expect.anything(),
+        'client-credentials-token',
+        expect.any(Object),
+        expect.any(Object),
+        undefined
+      );
+    });
+
+    it('takes precedence over tokenRefresher/oauth2State when both are configured', async () => {
+      (axios as unknown as jest.Mock).mockResolvedValue({ data: { ok: true } });
+      const accessTokenProvider = { getAccessToken: jest.fn().mockResolvedValue('client-credentials-token') };
+      const tokenRefresher = { refreshIfNeeded: jest.fn() };
+
+      await service.execute(mockSpec, 'getUsers', {}, {
+        accessToken: 'old-token',
+        accessTokenProvider,
+        tokenRefresher,
+        oauth2State: { accessToken: 'old-token' },
+      });
+
+      expect(accessTokenProvider.getAccessToken).toHaveBeenCalledTimes(1);
+      expect(tokenRefresher.refreshIfNeeded).not.toHaveBeenCalled();
+    });
+
+    it('propagates a rejection from accessTokenProvider instead of sending an unauthenticated request', async () => {
+      (axios as unknown as jest.Mock).mockResolvedValue({ data: { ok: true } });
+      const accessTokenProvider = { getAccessToken: jest.fn().mockRejectedValue(new Error('token endpoint down')) };
+
+      await expect(service.execute(mockSpec, 'getUsers', {}, { accessTokenProvider })).rejects.toThrow('token endpoint down');
+      expect(axios).not.toHaveBeenCalled();
+    });
+  });
+
   describe('retry', () => {
     const mockSpec = {
       servers: [{ url: 'https://api.example.com' }],

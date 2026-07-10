@@ -358,6 +358,59 @@ Third-party APIs are flaky. Three independent knobs handle this without any extr
 
 ---
 
+## 🔑 OAuth2 Token Management
+
+Two `ExecuteToolOptions` hooks cover the two OAuth2 grant types this library supports end-to-end.
+Both are deliberately narrow in scope — authorization_code/PKCE and refresh_token *rotation* are
+left to the caller, since they involve app-specific concerns (user sessions, redirect handling)
+this library has no business owning.
+
+**`client_credentials`** (machine-to-machine, no user/redirect involved) — use
+`ClientCredentialsTokenProvider` when the API itself issues short-lived tokens from a
+client id/secret pair:
+
+```ts
+import { ClientCredentialsTokenProvider } from 'agentic-openapi-parser';
+
+const accessTokenProvider = new ClientCredentialsTokenProvider({
+  tokenUrl: 'https://provider.example.com/oauth/token',
+  clientId: 'YOUR_CLIENT_ID',
+  clientSecret: 'YOUR_CLIENT_SECRET',
+  scope: 'read write', // optional
+});
+
+await agent.executeTool(spec, 'getInvoice', args, { accessTokenProvider });
+```
+
+It fetches a token on first use, caches it in memory, and transparently fetches a new one once the
+cached token is within 5 minutes of expiry (`refreshThresholdMs`, configurable). Concurrent calls
+while a fetch is in flight share the same request instead of hammering the token endpoint. If a
+renewal fetch fails but a still-valid cached token exists, it keeps serving that token (and logs a
+warning); if there's no usable token at all, `executeTool()` rejects with a clear error rather than
+silently sending an unauthenticated request.
+
+**`refresh_token`** (a user-specific token you already have, refreshed as it nears expiry) — use
+`Oauth2RefreshTokenRefresher` together with `oauth2State`:
+
+```ts
+import { Oauth2RefreshTokenRefresher } from 'agentic-openapi-parser';
+
+const tokenRefresher = new Oauth2RefreshTokenRefresher({
+  onRefreshed: (newState) => saveTokenToYourDatabase(newState), // fire-and-forget
+});
+
+await agent.executeTool(spec, 'getInvoice', args, {
+  accessToken: currentAccessToken,
+  tokenRefresher,
+  oauth2State: { accessToken: currentAccessToken, refreshToken, tokenUrl, tokenExpiresAt, clientId, clientSecret },
+});
+```
+
+If both `accessTokenProvider` and `tokenRefresher`/`oauth2State` are set, `accessTokenProvider`
+wins — they model different grant types and aren't meant to be combined on the same call.
+
+---
+
 ## 🔒 Security & Logging
 
 This library implements robust safety checks:

@@ -45,7 +45,9 @@ export class DynamicToolExecutorService implements IDynamicToolExecutorService {
     const requestBody = args.requestBody;
 
     let accessToken = options?.accessToken;
-    if (accessToken && options?.tokenRefresher && options?.oauth2State) {
+    if (options?.accessTokenProvider) {
+      accessToken = await options.accessTokenProvider.getAccessToken();
+    } else if (accessToken && options?.tokenRefresher && options?.oauth2State) {
       const refreshed = await options.tokenRefresher.refreshIfNeeded(options.oauth2State);
       if (refreshed) accessToken = refreshed.accessToken;
     }

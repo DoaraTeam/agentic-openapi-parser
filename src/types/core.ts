@@ -42,6 +42,17 @@ export interface TokenRefresher {
   refreshIfNeeded(state: OAuth2TokenState): Promise<OAuth2TokenState | undefined>;
 }
 
+export interface AccessTokenProvider {
+  /**
+   * Returns a currently-valid access token, acquiring or renewing it internally as needed (e.g. an
+   * OAuth2 client_credentials grant). Unlike TokenRefresher there is no pre-existing token to fall
+   * back to on the very first call, so implementations may throw when no valid token can be
+   * obtained at all — the executor lets that propagate as-is rather than forcing it through the
+   * HTTP-response-shaped error handling used for a failed tool call.
+   */
+  getAccessToken(): Promise<string>;
+}
+
 export interface RetryOptions {
   /** Number of retry attempts after the initial call. Default 0 (no retry). */
   maxRetries?: number;
@@ -60,6 +71,8 @@ export interface ExecuteToolOptions {
   responseProcessors?: ResponseProcessor[];
   tokenRefresher?: TokenRefresher;
   oauth2State?: OAuth2TokenState;
+  /** Supplies the access token from scratch (e.g. OAuth2 client_credentials). Takes precedence over tokenRefresher/oauth2State when both are set — the two model different grant types and aren't meant to be combined. */
+  accessTokenProvider?: AccessTokenProvider;
   retry?: RetryOptions;
   /** Must match the namespace passed to parseAndFlatten() for this tool, so its name can be resolved back to the OpenAPI operation. */
   namespace?: string;
