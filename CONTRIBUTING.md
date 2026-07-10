@@ -39,9 +39,21 @@ test: add security-injector parity cases matching slack-be orchestration
 
 ## Publishing
 
-`npm publish` only runs from the `main` branch — a `prepublishOnly` script
-(`scripts/assert-main-branch.js`) checks the current branch and aborts otherwise. Merge to
-`main` before publishing a new version.
+Publishing is automated via `.github/workflows/publish.yml` — it triggers on any pushed tag
+matching `v*.*.*`, re-runs lint/typecheck/test/build, verifies the tag matches
+`package.json`'s version, then runs `npm publish` using the `NPM_TOKEN` repo secret. Nobody
+should run `npm publish` by hand.
+
+To release a new version:
+
+```bash
+git checkout main && git pull
+npm version patch   # or minor / major — bumps package.json, commits, and tags
+git push && git push --tags
+```
+
+A `prepublishOnly` script (`scripts/assert-main-branch.js`) also blocks a manual/local
+`npm publish` unless run from `main`, as a second line of defense.
 
 ## Adding a new AI adapter (e.g. OpenAI, Anthropic, MCP)
 
