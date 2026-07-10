@@ -1,9 +1,7 @@
 import SwaggerParser from '@apidevtools/swagger-parser';
-import { DynamicToolDefinition } from '@/types';
-import { IOpenApiParserService } from '@/services/openapi-parser.interface';
-import { ILogger } from '@/types/logger';
-import { DEFAULT_LOGGER } from '@/utils/logger';
-import { deriveToolName, iterateOperations } from '@/utils/tool-identity';
+import { DynamicToolDefinition, ILogger } from '@/types';
+import type { IOpenApiParserService } from '@/services';
+import { DEFAULT_LOGGER, deriveToolName, iterateOperations } from '@/utils';
 
 export class OpenApiParserService implements IOpenApiParserService {
   constructor(private readonly logger: ILogger = DEFAULT_LOGGER) {}

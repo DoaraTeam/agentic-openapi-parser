@@ -1,5 +1,5 @@
 import { SecurityStrategyRegistry, createDefaultSecurityStrategyRegistry } from './registry';
-import { ISecurityStrategy } from '@/services/security-strategy.interface';
+import type { ISecurityStrategy } from '@/services';
 
 describe('SecurityStrategyRegistry', () => {
   it('returns registered strategies for a scheme type', () => {

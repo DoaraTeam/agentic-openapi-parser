@@ -1,9 +1,7 @@
-import { DynamicProviderAuthType } from '@/types';
-import { IOpenApiSecurityInjector } from '@/services/openapi-security-injector.interface';
-import { ILogger } from '@/types/logger';
-import { DEFAULT_LOGGER } from '@/utils/logger';
-import { SecurityStrategyRegistry, createDefaultSecurityStrategyRegistry } from './security';
-import { encodeBasicAuthHeader } from './security/basic-auth.util';
+import { DynamicProviderAuthType, ILogger } from '@/types';
+import type { IOpenApiSecurityInjector } from '@/services';
+import { DEFAULT_LOGGER } from '@/utils';
+import { SecurityStrategyRegistry, createDefaultSecurityStrategyRegistry, encodeBasicAuthHeader } from './security';
 
 export class OpenApiSecurityInjector implements IOpenApiSecurityInjector {
   constructor(

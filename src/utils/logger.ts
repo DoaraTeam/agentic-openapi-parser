@@ -1,4 +1,4 @@
-import { ILogger } from '@/types/logger';
+import { ILogger } from '@/types';
 import pino from 'pino';
 
 const pinoLogger = pino({

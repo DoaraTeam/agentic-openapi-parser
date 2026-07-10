@@ -1,5 +1,5 @@
 import { ApiKeyStrategy } from './api-key.strategy';
-import { DynamicProviderAuthType } from '@/types/core';
+import { DynamicProviderAuthType } from '@/types';
 
 describe('ApiKeyStrategy', () => {
   let strategy: ApiKeyStrategy;

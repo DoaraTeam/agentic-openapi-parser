@@ -1,5 +1,5 @@
 import { OAuth2Strategy } from './oauth2.strategy';
-import { DynamicProviderAuthType } from '@/types/core';
+import { DynamicProviderAuthType } from '@/types';
 
 describe('OAuth2Strategy', () => {
   let strategy: OAuth2Strategy;

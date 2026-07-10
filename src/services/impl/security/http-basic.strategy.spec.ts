@@ -1,5 +1,5 @@
 import { HttpBasicStrategy } from './http-basic.strategy';
-import { DynamicProviderAuthType } from '@/types/core';
+import { DynamicProviderAuthType } from '@/types';
 
 describe('HttpBasicStrategy', () => {
   let strategy: HttpBasicStrategy;

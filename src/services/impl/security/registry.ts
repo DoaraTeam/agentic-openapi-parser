@@ -1,4 +1,4 @@
-import { ISecurityStrategy } from '@/services/security-strategy.interface';
+import type { ISecurityStrategy } from '@/services';
 import { ApiKeyStrategy } from './api-key.strategy';
 import { HttpBearerStrategy } from './http-bearer.strategy';
 import { HttpBasicStrategy } from './http-basic.strategy';

@@ -1,4 +1,4 @@
-import { DynamicProviderAuthType } from '@/types/core';
+import { DynamicProviderAuthType } from '@/types';
 
 export interface SecurityInjectionContext {
   scheme: Record<string, unknown>;

@@ -1,4 +1,4 @@
-import { ExecuteToolOptions } from '@/types/core';
+import { ExecuteToolOptions } from '@/types';
 
 export const DYNAMIC_TOOL_EXECUTOR_SERVICE = Symbol('DYNAMIC_TOOL_EXECUTOR_SERVICE');
 

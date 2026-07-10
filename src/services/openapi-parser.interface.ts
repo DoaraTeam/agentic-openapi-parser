@@ -1,4 +1,4 @@
-import { DynamicToolDefinition } from '@/types/core';
+import { DynamicToolDefinition } from '@/types';
 
 export const OPENAPI_PARSER_SERVICE = Symbol('OPENAPI_PARSER_SERVICE');
 

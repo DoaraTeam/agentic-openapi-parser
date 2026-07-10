@@ -1,5 +1,5 @@
 import { HttpBearerStrategy } from './http-bearer.strategy';
-import { DynamicProviderAuthType } from '@/types/core';
+import { DynamicProviderAuthType } from '@/types';
 
 describe('HttpBearerStrategy', () => {
   let strategy: HttpBearerStrategy;

@@ -1,4 +1,4 @@
-import { DynamicProviderAuthType } from '@/types/core';
+import { DynamicProviderAuthType } from '@/types';
 
 export const OPENAPI_SECURITY_INJECTOR = Symbol('OPENAPI_SECURITY_INJECTOR');
 

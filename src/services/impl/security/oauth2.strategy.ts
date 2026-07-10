@@ -1,5 +1,5 @@
-import { DynamicProviderAuthType } from '@/types/core';
-import { ISecurityStrategy, SecurityInjectionContext } from '@/services/security-strategy.interface';
+import { DynamicProviderAuthType } from '@/types';
+import type { ISecurityStrategy, SecurityInjectionContext } from '@/services';
 
 export class OAuth2Strategy implements ISecurityStrategy {
   readonly schemeTypes = ['oauth2', 'openIdConnect'];

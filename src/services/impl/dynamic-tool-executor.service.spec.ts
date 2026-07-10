@@ -1,5 +1,5 @@
 import { DynamicToolExecutorService } from './dynamic-tool-executor.service';
-import { IOpenApiSecurityInjector } from '@/services/openapi-security-injector.interface';
+import type { IOpenApiSecurityInjector } from '@/services';
 import axios from 'axios';
 
 jest.mock('axios');

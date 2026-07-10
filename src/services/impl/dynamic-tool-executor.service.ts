@@ -1,10 +1,7 @@
 import axios, { AxiosRequestConfig } from 'axios';
-import { ExecuteToolOptions } from '@/types';
-import type { IDynamicToolExecutorService } from '@/services/dynamic-tool-executor.interface';
-import type { IOpenApiSecurityInjector } from '@/services/openapi-security-injector.interface';
-import { ILogger } from '@/types/logger';
-import { DEFAULT_LOGGER } from '@/utils/logger';
-import { findOperationByToolName } from '@/utils/tool-identity';
+import { ExecuteToolOptions, ILogger } from '@/types';
+import type { IDynamicToolExecutorService, IOpenApiSecurityInjector } from '@/services';
+import { DEFAULT_LOGGER, findOperationByToolName } from '@/utils';
 
 export class DynamicToolExecutorService implements IDynamicToolExecutorService {
   constructor(

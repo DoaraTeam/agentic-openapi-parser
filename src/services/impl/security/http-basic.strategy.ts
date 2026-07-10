@@ -1,5 +1,5 @@
-import { DynamicProviderAuthType } from '@/types/core';
-import { ISecurityStrategy, SecurityInjectionContext } from '@/services/security-strategy.interface';
+import { DynamicProviderAuthType } from '@/types';
+import type { ISecurityStrategy, SecurityInjectionContext } from '@/services';
 import { encodeBasicAuthHeader } from './basic-auth.util';
 
 export class HttpBasicStrategy implements ISecurityStrategy {

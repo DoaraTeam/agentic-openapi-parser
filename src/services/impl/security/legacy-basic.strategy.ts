@@ -1,5 +1,5 @@
-import { DynamicProviderAuthType } from '@/types/core';
-import { ISecurityStrategy, SecurityInjectionContext } from '@/services/security-strategy.interface';
+import { DynamicProviderAuthType } from '@/types';
+import type { ISecurityStrategy, SecurityInjectionContext } from '@/services';
 import { encodeBasicAuthHeader } from './basic-auth.util';
 
 /** Handles Swagger 2's bare `type: 'basic'` scheme (as opposed to OpenAPI 3's `type: 'http', scheme: 'basic'`). */
