@@ -3,6 +3,7 @@ import { DynamicToolDefinition } from '@/types';
 import { IOpenApiParserService } from '@/services/openapi-parser.interface';
 import { ILogger } from '@/types/logger';
 import { DEFAULT_LOGGER } from '@/utils/logger';
+import { deriveToolName, iterateOperations } from '@/utils/tool-identity';
 
 export class OpenApiParserService implements IOpenApiParserService {
   constructor(private readonly logger: ILogger = DEFAULT_LOGGER) {}
@@ -22,33 +23,19 @@ export class OpenApiParserService implements IOpenApiParserService {
 
   private extractToolsFromSpec(spec: Record<string, unknown>, providerId?: string): DynamicToolDefinition[] {
     const tools: DynamicToolDefinition[] = [];
-    const paths = (spec.paths as Record<string, unknown>) || {};
-    const methods = ['get', 'post', 'put', 'delete', 'patch', 'options', 'head'];
 
-    for (const [path, pathItem] of Object.entries(paths)) {
-      if (!pathItem) continue;
+    for (const { path, method, operation } of iterateOperations(spec)) {
+      const toolName = deriveToolName(method, path, operation.operationId as string | undefined);
 
-      for (const method of methods) {
-        const operation = (pathItem as Record<string, unknown>)[method] as Record<string, unknown> | undefined;
-        if (!operation) continue;
-
-        const rawName = (operation.operationId as string) || `${method}_${path.replace(/[^a-zA-Z0-9]/g, '_')}`;
-        const toolName = rawName
-          .replace(/[^a-zA-Z0-9_-]/g, '_')
-          .replace(/_+/g, '_')
-          .substring(0, 64)
-          .replace(/^_+|_+$/g, '') || 'unknown_tool';
-
-        tools.push({
-          name: toolName,
-          description: (operation.summary as string) || (operation.description as string) || `Execute ${method.toUpperCase()} request to ${path}`,
-          method,
-          url: path,
-          parameters: (operation.parameters as Record<string, unknown>[]) || [],
-          security: (operation.security || spec.security) as Record<string, unknown>[] | undefined,
-          providerId,
-        });
-      }
+      tools.push({
+        name: toolName,
+        description: (operation.summary as string) || (operation.description as string) || `Execute ${method.toUpperCase()} request to ${path}`,
+        method,
+        url: path,
+        parameters: (operation.parameters as Record<string, unknown>[]) || [],
+        security: (operation.security || spec.security) as Record<string, unknown>[] | undefined,
+        providerId,
+      });
     }
 
     this.logger.log(`Extracted ${tools.length} tools from spec.`);

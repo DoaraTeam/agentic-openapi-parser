@@ -4,6 +4,7 @@ import type { IDynamicToolExecutorService } from '@/services/dynamic-tool-execut
 import type { IOpenApiSecurityInjector } from '@/services/openapi-security-injector.interface';
 import { ILogger } from '@/types/logger';
 import { DEFAULT_LOGGER } from '@/utils/logger';
+import { findOperationByToolName } from '@/utils/tool-identity';
 
 export class DynamicToolExecutorService implements IDynamicToolExecutorService {
   constructor(
@@ -19,7 +20,7 @@ export class DynamicToolExecutorService implements IDynamicToolExecutorService {
   ): Promise<unknown> {
     this.logger.log(`Executing dynamic tool "${toolName}"`);
     
-    const operationInfo = this.findOperationByToolName(spec, toolName);
+    const operationInfo = findOperationByToolName(spec, toolName);
     
     if (!operationInfo) {
       throw new Error(`Tool "${toolName}" not found in the provided OpenAPI spec.`);
@@ -107,7 +108,7 @@ export class DynamicToolExecutorService implements IDynamicToolExecutorService {
     const data = axiosError.response?.data;
     const reqConfig = axiosError.config;
     
-    let safeHeaders: Record<string, string> = { ...reqConfig?.headers };
+    const safeHeaders: Record<string, string> = { ...reqConfig?.headers };
     if (safeHeaders['Authorization']) {
       const authVal = String(safeHeaders['Authorization']);
       if (authVal.toLowerCase().startsWith('bearer ')) {
@@ -119,7 +120,7 @@ export class DynamicToolExecutorService implements IDynamicToolExecutorService {
       }
     }
     
-    let safeParams: Record<string, unknown> = { ...reqConfig?.params };
+    const safeParams: Record<string, unknown> = { ...reqConfig?.params };
     if (safeParams['api_key']) safeParams['api_key'] = '***';
 
     const debugInfo = {
@@ -134,30 +135,5 @@ export class DynamicToolExecutorService implements IDynamicToolExecutorService {
     
     this.logger.error(errorText);
     throw new Error(errorText);
-  }
-
-  private findOperationByToolName(spec: Record<string, unknown>, targetToolName: string) {
-     const paths = (spec.paths as Record<string, unknown>) || {};
-     const methods = ['get', 'post', 'put', 'delete', 'patch', 'options', 'head'];
-     
-     for (const [path, pathItem] of Object.entries(paths)) {
-        if (!pathItem) continue;
-        for (const method of methods) {
-           const operation = (pathItem as Record<string, unknown>)[method] as Record<string, unknown> | undefined;
-           if (!operation) continue;
-           
-           const rawName = (operation.operationId as string) || `${method}_${path.replace(/[^a-zA-Z0-9]/g, '_')}`;
-           const generatedName = rawName
-             .replace(/[^a-zA-Z0-9_-]/g, '_')
-             .replace(/_+/g, '_')
-             .substring(0, 64)
-             .replace(/^_+|_+$/g, '') || 'unknown_tool';
-             
-           if (generatedName === targetToolName) {
-              return { path, method, operation };
-           }
-        }
-     }
-     return null;
   }
 }
