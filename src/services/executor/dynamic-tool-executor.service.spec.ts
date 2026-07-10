@@ -220,6 +220,27 @@ describe('DynamicToolExecutorService', () => {
     });
   });
 
+  describe('namespace', () => {
+    const mockSpec = {
+      servers: [{ url: 'https://api.example.com' }],
+      paths: { '/users': { get: { operationId: 'getUsers' } } },
+    };
+
+    it('strips a matching namespace prefix before looking up the operation', async () => {
+      (axios as unknown as jest.Mock).mockResolvedValue({ data: { ok: true } });
+
+      const result = await service.execute(mockSpec, 'github__getUsers', {}, { namespace: 'github' });
+
+      expect(result).toEqual({ ok: true });
+    });
+
+    it('fails to find the tool when no namespace option is given for a namespaced name', async () => {
+      (axios as unknown as jest.Mock).mockResolvedValue({ data: { ok: true } });
+
+      await expect(service.execute(mockSpec, 'github__getUsers', {})).rejects.toThrow(/not found/);
+    });
+  });
+
   describe('concurrency', () => {
     it('caps concurrent requests through this executor instance', async () => {
       const mockSpec = {

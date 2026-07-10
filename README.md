@@ -276,6 +276,49 @@ segments), and `?` (single character).
 
 ---
 
+## 🗄️ Spec Caching & Multi-Spec Namespacing
+
+**Caching** — re-parsing and re-dereferencing a large spec on every `parseAndFlatten()` call is
+wasteful for a long-lived process. Opt in via the `OpenApiParserService` constructor (this is a
+policy for the parser *instance*, like `maxConcurrency` is for the executor):
+
+```ts
+import { OpenApiParserService } from 'agentic-openapi-parser';
+
+const parser = new OpenApiParserService(logger, {
+  cache: {
+    ttlMs: 5 * 60 * 1000,      // how long a dereferenced document stays fresh
+    revalidateWithEtag: true,  // default true — see below
+  },
+});
+```
+
+For `http(s)://` spec URLs, once the TTL expires the parser doesn't necessarily redo the full
+dereference: if the server returned an `ETag` on the last fetch, it sends a conditional
+`If-None-Match` request first — a `304 Not Modified` reuses the already-dereferenced document at
+almost no cost, and only an actual `200` with new content triggers a full re-parse. Local file
+paths (or an already-parsed object) skip the ETag step entirely (there's no HTTP response to
+revalidate against) but still benefit from the TTL window itself.
+
+**Multi-spec namespacing** — when you flatten tools from more than one spec into a single list for
+an LLM, two specs can derive the same tool name (two `getUser` operations). Pass a `namespace` as
+the fourth argument to `parseAndFlatten()` to prefix every tool name from that spec:
+
+```ts
+const { tools: githubTools } = await agent.parseAndFlatten(githubSpecUrl, 'github-provider', undefined, 'github');
+const { tools: stripeTools } = await agent.parseAndFlatten(stripeSpecUrl, 'stripe-provider', undefined, 'stripe');
+// githubTools[0].name === 'github__getUser', stripeTools[0].name === 'stripe__getUser' — no collision
+```
+
+Pass the same `namespace` back in `ExecuteToolOptions.namespace` when executing one of these tools,
+so the executor can strip the prefix and resolve the original OpenAPI operation:
+
+```ts
+await agent.executeTool(spec, 'github__getUser', args, { namespace: 'github', accessToken: '...' });
+```
+
+---
+
 ## 🔁 Retry, Timeout & Concurrency
 
 Third-party APIs are flaky. Three independent knobs handle this without any extra dependency:

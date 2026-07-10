@@ -3,3 +3,4 @@ export * from './tool-identity';
 export * from './glob-match';
 export * from './tool-filter';
 export * from './concurrency-limiter';
+export * from './tool-namespace';

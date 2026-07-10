@@ -61,6 +61,8 @@ export interface ExecuteToolOptions {
   tokenRefresher?: TokenRefresher;
   oauth2State?: OAuth2TokenState;
   retry?: RetryOptions;
+  /** Must match the namespace passed to parseAndFlatten() for this tool, so its name can be resolved back to the OpenAPI operation. */
+  namespace?: string;
 }
 
 export interface IAiAdapter<TTool = unknown, TReturnType = TTool[]> {

@@ -1,7 +1,9 @@
 import { OpenApiParserService } from './openapi-parser.service';
 import SwaggerParser from '@apidevtools/swagger-parser';
+import axios from 'axios';
 
 jest.mock('@apidevtools/swagger-parser');
+jest.mock('axios');
 
 describe('OpenApiParserService', () => {
   let service: OpenApiParserService;
@@ -122,5 +124,102 @@ describe('OpenApiParserService', () => {
 
     expect(result.tools).toHaveLength(1);
     expect(result.tools?.[0]?.name).toBe('getPets');
+  });
+
+  it('should prefix tool names with the given namespace', async () => {
+    const mockSpec = {
+      paths: {
+        '/pets': { get: { operationId: 'getPets' } },
+      },
+    };
+
+    (SwaggerParser.dereference as jest.Mock).mockResolvedValue(mockSpec);
+
+    const result = await service.parseAndFlatten('http://fake-url.com', undefined, undefined, 'github');
+
+    expect(result.tools?.[0]?.name).toBe('github__getPets');
+  });
+
+  describe('caching', () => {
+    const mockSpec = { paths: { '/pets': { get: { operationId: 'getPets' } } } };
+
+    function makeCachingService(ttlMs = 1000, revalidateWithEtag = true) {
+      return new OpenApiParserService(
+        { log: jest.fn(), error: jest.fn(), warn: jest.fn(), debug: jest.fn() },
+        { cache: { ttlMs, revalidateWithEtag } }
+      );
+    }
+
+    it('fetches once and reuses the cached document within the TTL window', async () => {
+      const cachingService = makeCachingService(1000);
+      (axios.get as jest.Mock).mockResolvedValue({ data: mockSpec, headers: { etag: 'v1' } });
+      (SwaggerParser.dereference as jest.Mock).mockImplementation((doc: unknown) => Promise.resolve(doc));
+
+      await cachingService.parseAndFlatten('https://api.example.com/openapi.json');
+      await cachingService.parseAndFlatten('https://api.example.com/openapi.json');
+
+      expect(axios.get).toHaveBeenCalledTimes(1);
+      expect(SwaggerParser.dereference).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not cache across different spec URLs', async () => {
+      const cachingService = makeCachingService(1000);
+      (axios.get as jest.Mock).mockResolvedValue({ data: mockSpec, headers: {} });
+      (SwaggerParser.dereference as jest.Mock).mockImplementation((doc: unknown) => Promise.resolve(doc));
+
+      await cachingService.parseAndFlatten('https://api.example.com/a.json');
+      await cachingService.parseAndFlatten('https://api.example.com/b.json');
+
+      expect(axios.get).toHaveBeenCalledTimes(2);
+    });
+
+    it('revalidates with If-None-Match after the TTL expires and reuses the cached document on 304', async () => {
+      const cachingService = makeCachingService(10);
+      (axios.get as jest.Mock)
+        .mockResolvedValueOnce({ data: mockSpec, headers: { etag: 'v1' } })
+        .mockResolvedValueOnce({ status: 304 });
+      (SwaggerParser.dereference as jest.Mock).mockImplementation((doc: unknown) => Promise.resolve(doc));
+
+      await cachingService.parseAndFlatten('https://api.example.com/openapi.json');
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      const result = await cachingService.parseAndFlatten('https://api.example.com/openapi.json');
+
+      expect(axios.get).toHaveBeenCalledTimes(2);
+      expect(axios.get).toHaveBeenNthCalledWith(
+        2,
+        'https://api.example.com/openapi.json',
+        expect.objectContaining({ headers: { 'If-None-Match': 'v1' } })
+      );
+      expect(SwaggerParser.dereference).toHaveBeenCalledTimes(1);
+      expect(result.tools?.[0]?.name).toBe('getPets');
+    });
+
+    it('re-dereferences when a 200 with a changed spec comes back after TTL expiry', async () => {
+      const cachingService = makeCachingService(10);
+      const updatedSpec = { paths: { '/pets': { get: { operationId: 'getPets' } }, '/dogs': { get: { operationId: 'getDogs' } } } };
+      (axios.get as jest.Mock)
+        .mockResolvedValueOnce({ data: mockSpec, headers: { etag: 'v1' } })
+        .mockResolvedValueOnce({ status: 200, data: updatedSpec, headers: { etag: 'v2' } });
+      (SwaggerParser.dereference as jest.Mock).mockImplementation((doc: unknown) => Promise.resolve(doc));
+
+      await cachingService.parseAndFlatten('https://api.example.com/openapi.json');
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      const result = await cachingService.parseAndFlatten('https://api.example.com/openapi.json');
+
+      expect(SwaggerParser.dereference).toHaveBeenCalledTimes(2);
+      expect(result.tools).toHaveLength(2);
+    });
+
+    it('does not use axios for a local file path — falls back to a full SwaggerParser.dereference each time TTL expires', async () => {
+      const cachingService = makeCachingService(10);
+      (SwaggerParser.dereference as jest.Mock).mockResolvedValue(mockSpec);
+
+      await cachingService.parseAndFlatten('./local-spec.json');
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      await cachingService.parseAndFlatten('./local-spec.json');
+
+      expect(axios.get).not.toHaveBeenCalled();
+      expect(SwaggerParser.dereference).toHaveBeenCalledTimes(2);
+    });
   });
 });

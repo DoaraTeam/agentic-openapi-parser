@@ -1,17 +1,41 @@
+import axios from 'axios';
 import SwaggerParser from '@apidevtools/swagger-parser';
 import { DynamicToolDefinition, ILogger } from '@/types';
 import type { IOpenApiParserService } from '@/services';
 import type { ToolFilterOptions } from '@/utils';
-import { DEFAULT_LOGGER, deriveToolName, filterTools, iterateOperations } from '@/utils';
+import { applyNamespace, DEFAULT_LOGGER, deriveToolName, filterTools, iterateOperations } from '@/utils';
+import { SpecCache } from './spec-cache';
+
+export interface OpenApiParserServiceOptions {
+  /** Caches dereferenced spec documents in memory, keyed by apiSpecUrl. Unset = no caching (always re-fetch/re-dereference). */
+  cache?: {
+    ttlMs: number;
+    /** For http(s) URLs, revalidate an expired entry with a conditional GET (If-None-Match) instead of a full re-fetch when the server returns an ETag. Default true. */
+    revalidateWithEtag?: boolean;
+  };
+}
+
+const HTTP_URL_PATTERN = /^https?:\/\//i;
 
 export class OpenApiParserService implements IOpenApiParserService {
-  constructor(private readonly logger: ILogger = DEFAULT_LOGGER) {}
+  private readonly cache?: SpecCache;
+  private readonly revalidateWithEtag: boolean;
 
-  async parseAndFlatten(apiSpecUrl: string, providerId?: string, filter?: ToolFilterOptions): Promise<{ document: Record<string, unknown>, tools: DynamicToolDefinition[] }> {
+  constructor(private readonly logger: ILogger = DEFAULT_LOGGER, options?: OpenApiParserServiceOptions) {
+    this.cache = options?.cache ? new SpecCache(options.cache.ttlMs) : undefined;
+    this.revalidateWithEtag = options?.cache?.revalidateWithEtag ?? true;
+  }
+
+  async parseAndFlatten(
+    apiSpecUrl: string,
+    providerId?: string,
+    filter?: ToolFilterOptions,
+    namespace?: string
+  ): Promise<{ document: Record<string, unknown>, tools: DynamicToolDefinition[] }> {
     this.logger.log(`Parsing OpenAPI spec from: ${apiSpecUrl}`);
     try {
-      const document = await SwaggerParser.dereference(apiSpecUrl) as Record<string, unknown>;
-      const allTools = this.extractToolsFromSpec(document, providerId);
+      const document = await this.loadDocument(apiSpecUrl);
+      const allTools = this.extractToolsFromSpec(document, providerId, namespace);
       const tools = filterTools(allTools, filter);
       if (filter && tools.length !== allTools.length) {
         this.logger.log(`Tool filter kept ${tools.length}/${allTools.length} tools.`);
@@ -24,11 +48,50 @@ export class OpenApiParserService implements IOpenApiParserService {
     }
   }
 
-  private extractToolsFromSpec(spec: Record<string, unknown>, providerId?: string): DynamicToolDefinition[] {
+  private async loadDocument(apiSpecUrl: string): Promise<Record<string, unknown>> {
+    if (!this.cache) {
+      return (await SwaggerParser.dereference(apiSpecUrl)) as Record<string, unknown>;
+    }
+
+    const fresh = this.cache.get(apiSpecUrl);
+    if (fresh) {
+      this.logger.debug?.(`Using cached spec for ${apiSpecUrl}`);
+      return fresh.document;
+    }
+
+    if (!HTTP_URL_PATTERN.test(apiSpecUrl)) {
+      const document = (await SwaggerParser.dereference(apiSpecUrl)) as Record<string, unknown>;
+      this.cache.set(apiSpecUrl, { document });
+      return document;
+    }
+
+    const stale = this.cache.getStale(apiSpecUrl);
+    if (stale?.etag && this.revalidateWithEtag) {
+      const response = await axios.get(apiSpecUrl, {
+        headers: { 'If-None-Match': stale.etag },
+        validateStatus: (status) => status === 200 || status === 304,
+      });
+      if (response.status === 304) {
+        this.cache.touch(apiSpecUrl);
+        this.logger.debug?.(`Spec unchanged (304 Not Modified): ${apiSpecUrl}`);
+        return stale.document;
+      }
+      const document = (await SwaggerParser.dereference(response.data)) as Record<string, unknown>;
+      this.cache.set(apiSpecUrl, { document, etag: response.headers.etag as string | undefined });
+      return document;
+    }
+
+    const response = await axios.get(apiSpecUrl);
+    const document = (await SwaggerParser.dereference(response.data)) as Record<string, unknown>;
+    this.cache.set(apiSpecUrl, { document, etag: response.headers.etag as string | undefined });
+    return document;
+  }
+
+  private extractToolsFromSpec(spec: Record<string, unknown>, providerId?: string, namespace?: string): DynamicToolDefinition[] {
     const tools: DynamicToolDefinition[] = [];
 
     for (const { path, method, operation } of iterateOperations(spec)) {
-      const toolName = deriveToolName(method, path, operation.operationId as string | undefined);
+      const toolName = applyNamespace(deriveToolName(method, path, operation.operationId as string | undefined), namespace);
       const { schema: requestBodySchema, required: requestBodyRequired } = this.extractRequestBody(operation);
 
       tools.push({

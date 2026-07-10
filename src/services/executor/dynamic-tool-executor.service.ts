@@ -1,7 +1,7 @@
 import axios, { AxiosError, AxiosRequestConfig, AxiosResponse } from 'axios';
 import { ExecuteToolOptions, ILogger, ResponseProcessor, RetryOptions } from '@/types';
 import type { IDynamicToolExecutorService, IOpenApiSecurityInjector } from '@/services';
-import { ConcurrencyLimiter, DEFAULT_LOGGER, findOperationByToolName } from '@/utils';
+import { ConcurrencyLimiter, DEFAULT_LOGGER, findOperationByToolName, stripNamespace } from '@/utils';
 import { RetryPolicy } from './retry-policy';
 
 export interface DynamicToolExecutorServiceOptions {
@@ -29,9 +29,10 @@ export class DynamicToolExecutorService implements IDynamicToolExecutorService {
     options?: ExecuteToolOptions
   ): Promise<unknown> {
     this.logger.log(`Executing dynamic tool "${toolName}"`);
-    
-    const operationInfo = findOperationByToolName(spec, toolName);
-    
+
+    const unnamespacedName = stripNamespace(toolName, options?.namespace);
+    const operationInfo = findOperationByToolName(spec, unnamespacedName);
+
     if (!operationInfo) {
       throw new Error(`Tool "${toolName}" not found in the provided OpenAPI spec.`);
     }
