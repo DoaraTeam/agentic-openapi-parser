@@ -1,7 +1,7 @@
 {
-  "name": "agentic-openapi",
+  "name": "agentic-openapi-parser",
   "version": "1.0.0",
-  "description": "",
+  "description": "A framework-agnostic TypeScript library for dynamic OpenAPI tool execution",
   "main": "dist/index.js",
   "module": "dist/index.mjs",
   "types": "dist/index.d.ts",
@@ -24,8 +24,22 @@
     "lint": "eslint src",
     "typecheck": "tsc --noEmit"
   },
-  "keywords": [],
-  "author": "",
+  "keywords": [
+    "openapi",
+    "agentic",
+    "parser",
+    "llm",
+    "tools",
+    "typescript"
+  ],
+  "author": "Your Name <your.email@example.com>",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/your-username/agentic-openapi-parser.git"
+  },
+  "files": [
+    "dist"
+  ],
   "license": "MIT",
   "packageManager": "pnpm@10.25.0",
   "dependencies": {
