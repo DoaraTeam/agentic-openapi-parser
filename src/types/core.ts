@@ -21,3 +21,7 @@ export interface ExecuteToolOptions {
   accessToken?: string;
   timeout?: number;
 }
+
+export interface IAiAdapter<TTool = unknown, TReturnType = TTool[]> {
+  getTools(): TReturnType;
+}

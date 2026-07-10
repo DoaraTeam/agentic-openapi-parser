@@ -1,9 +1,9 @@
 import type { ISecurityStrategy } from '@/services';
-import { ApiKeyStrategy } from './api-key.strategy';
-import { HttpBearerStrategy } from './http-bearer.strategy';
-import { HttpBasicStrategy } from './http-basic.strategy';
-import { OAuth2Strategy } from './oauth2.strategy';
-import { LegacyBasicStrategy } from './legacy-basic.strategy';
+import { ApiKeyStrategy } from './strategies/api-key.strategy';
+import { HttpBearerStrategy } from './strategies/http-bearer.strategy';
+import { HttpBasicStrategy } from './strategies/http-basic.strategy';
+import { OAuth2Strategy } from './strategies/oauth2.strategy';
+import { LegacyBasicStrategy } from './strategies/legacy-basic.strategy';
 
 export class SecurityStrategyRegistry {
   private strategies = new Map<string, ISecurityStrategy[]>();

@@ -36,18 +36,18 @@ runs them on every push and pull request.
 ## Adding a new auth/security strategy
 
 Security injection is a registry of `ISecurityStrategy` implementations
-(`src/services/impl/security/`), keyed by OpenAPI `securityScheme.type`. To add a new
+(`src/services/security/strategies/`), keyed by OpenAPI `securityScheme.type`. To add a new
 scheme (e.g. HMAC signing, mTLS):
 
-1. Create `src/services/impl/security/<name>.strategy.ts` implementing `ISecurityStrategy`
+1. Create `src/services/security/strategies/<name>.strategy.ts` implementing `ISecurityStrategy`
    (`schemeTypes`, `supportsAuthType()`, `inject()`).
 2. Register it in `createDefaultSecurityStrategyRegistry()`
-   (`src/services/impl/security/registry.ts`), or — if it shouldn't ship as a built-in —
+   (`src/services/security/registry.ts`), or — if it shouldn't ship as a built-in —
    construct your own `SecurityStrategyRegistry` and pass it into
    `new OpenApiSecurityInjector(logger, myRegistry)`.
 3. Add a unit test for the strategy in isolation (`supportsAuthType` gating + `inject`
    behavior), plus confirm the existing
-   `src/services/impl/openapi-security.injector.spec.ts` suite still passes unmodified.
+   `src/services/security/openapi-security.injector.spec.ts` suite still passes unmodified.
 
 ## Tests are required
 
