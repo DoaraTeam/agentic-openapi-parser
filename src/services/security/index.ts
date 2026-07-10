@@ -4,3 +4,4 @@ export * from './security-strategy.interface';
 export * from './registry';
 export * from './basic-auth.util';
 export * from './strategies';
+export * from './oauth2-token-refresher';

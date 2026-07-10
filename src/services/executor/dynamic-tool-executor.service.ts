@@ -1,5 +1,5 @@
 import axios, { AxiosRequestConfig } from 'axios';
-import { ExecuteToolOptions, ILogger } from '@/types';
+import { ExecuteToolOptions, ILogger, ResponseProcessor } from '@/types';
 import type { IDynamicToolExecutorService, IOpenApiSecurityInjector } from '@/services';
 import { DEFAULT_LOGGER, findOperationByToolName } from '@/utils';
 
@@ -30,8 +30,14 @@ export class DynamicToolExecutorService implements IDynamicToolExecutorService {
 
     const requestBody = args.requestBody;
 
-    if (options?.accessToken) {
-      this.securityInjector.inject(spec, operation, options.accessToken, headers, queryParams, options.authType);
+    let accessToken = options?.accessToken;
+    if (accessToken && options?.tokenRefresher && options?.oauth2State) {
+      const refreshed = await options.tokenRefresher.refreshIfNeeded(options.oauth2State);
+      if (refreshed) accessToken = refreshed.accessToken;
+    }
+
+    if (accessToken) {
+      this.securityInjector.inject(spec, operation, accessToken, headers, queryParams, options?.authType);
     }
 
     this.logger.debug?.(`[${method.toUpperCase()}] Requesting: ${requestUrl}`);
@@ -47,10 +53,15 @@ export class DynamicToolExecutorService implements IDynamicToolExecutorService {
 
     try {
       const response = await axios(reqConfig);
-      return response.data;
+      return this.applyResponseProcessors(response.data, options?.responseProcessors);
     } catch (error: unknown) {
       this.handleExecutionError(error);
     }
+  }
+
+  private applyResponseProcessors(data: unknown, processors?: ResponseProcessor[]): unknown {
+    if (!processors || processors.length === 0) return data;
+    return processors.reduce((acc, processor) => processor.process(acc), data);
   }
 
   private getBaseUrl(spec: Record<string, unknown>): string {
