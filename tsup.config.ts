@@ -8,7 +8,8 @@ export default defineConfig({
     'src/utils/index.ts',
     'src/adapters/nestjs/index.ts',
     'src/adapters/langchain/index.ts',
-    'src/adapters/vercel-ai/index.ts'
+    'src/adapters/vercel-ai/index.ts',
+    'src/adapters/mcp/index.ts'
   ],
   format: ['cjs', 'esm'],
   dts: true,

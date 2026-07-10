@@ -33,9 +33,9 @@ pnpm add agentic-openapi
 yarn add agentic-openapi
 ```
 
-If you plan to use the AI Adapters, install the peer dependencies:
+If you plan to use the AI Adapters, install the peer dependencies you need:
 ```bash
-npm install zod @langchain/core ai
+npm install zod @langchain/core ai @modelcontextprotocol/sdk
 ```
 
 ---
@@ -178,6 +178,46 @@ const langchainTools = adapter.getTools(); // Returns DynamicStructuredTool[]
 // Bind tools to the LLM
 const llmWithTools = llm.bindTools(langchainTools);
 ```
+
+### MCP Adapter
+
+Expose your parsed OpenAPI tools on an [MCP](https://modelcontextprotocol.io) server. This adapter
+only registers tools — it does not choose a transport or call `.connect()`, so you stay in control
+of whether the server runs over stdio, HTTP, or anything else.
+
+```typescript
+import { DynamicOpenApiAgent } from 'agentic-openapi';
+import { McpToolAdapter } from 'agentic-openapi/adapters/mcp';
+import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+
+const agent = new DynamicOpenApiAgent();
+const { spec, tools } = await agent.parseAndFlatten('https://api.example.com/docs');
+
+const adapter = new McpToolAdapter(agent.getExecutor(), spec, tools, {
+  token: 'YOUR_API_KEY',
+  authType: 'BEARER'
+});
+
+// Builds a McpServer and registers every tool onto it (unconnected)
+const server = adapter.createServer({ name: 'my-api-server', version: '1.0.0' });
+
+// You choose the transport and connect it yourself
+const transport = new StdioServerTransport();
+await server.connect(transport);
+```
+
+If you already have a `McpServer` instance (e.g. one that also serves resources/prompts), use
+`adapter.registerOn(existingServer)` instead of `createServer()`.
+
+---
+
+## 🧠 Request Bodies & Nested Schemas
+
+Tool schemas aren't limited to flat query/path parameters — `requestBody` (OpenAPI 3), nested
+objects, arrays, enums, and common string formats (`date-time`, `email`, `uuid`) are all converted
+into the matching Zod validators, so the LLM sees (and is validated against) the real shape of the
+payload it needs to send, not just a generic string/object. A POST endpoint with a JSON request
+body shows up in the generated tool schema as a `requestBody` field alongside the usual parameters.
 
 ---
 
