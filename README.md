@@ -209,6 +209,39 @@ await server.connect(transport);
 If you already have a `McpServer` instance (e.g. one that also serves resources/prompts), use
 `adapter.registerOn(existingServer)` instead of `createServer()`.
 
+### OpenAI / Anthropic Native Tool Adapters
+
+Both providers' tool-calling format is plain JSON — no SDK required, so these two adapters carry
+**zero peer dependency**. `getTools()` returns wire-format objects ready to pass straight into the
+provider's request; `executeToolCall(name, args)` maps a returned tool call back to the matching
+OpenAPI operation and runs it.
+
+```typescript
+import { DynamicOpenApiAgent } from 'agentic-openapi';
+import { OpenAiToolAdapter } from 'agentic-openapi/adapters/openai';
+import OpenAI from 'openai';
+
+const agent = new DynamicOpenApiAgent();
+const { spec, tools } = await agent.parseAndFlatten('https://api.example.com/docs');
+const adapter = new OpenAiToolAdapter(agent.getExecutor(), spec, tools, { accessToken: 'YOUR_API_KEY' });
+
+const client = new OpenAI();
+const response = await client.chat.completions.create({
+  model: 'gpt-4-turbo',
+  messages: [{ role: 'user', content: 'Get the user with ID 123' }],
+  tools: adapter.getTools(),
+});
+
+const call = response.choices[0]?.message.tool_calls?.[0];
+if (call) {
+  const result = await adapter.executeToolCall(call.function.name, JSON.parse(call.function.arguments));
+}
+```
+
+`AnthropicToolAdapter` (`agentic-openapi/adapters/anthropic`) works the same way — `getTools()`
+returns `{ name, description, input_schema }[]` for the Messages API's `tools` field, and a
+`tool_use` content block's `name`/`input` go straight into `executeToolCall(name, input)`.
+
 ---
 
 ## 🧠 Request Bodies & Nested Schemas

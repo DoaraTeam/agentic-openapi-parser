@@ -10,6 +10,8 @@ export default defineConfig({
     'src/adapters/langchain/index.ts',
     'src/adapters/vercel-ai/index.ts',
     'src/adapters/mcp/index.ts',
+    'src/adapters/openai/index.ts',
+    'src/adapters/anthropic/index.ts',
     'src/adapters/shared/index.ts'
   ],
   format: ['cjs', 'esm'],

@@ -57,18 +57,30 @@ A `prepublishOnly` script (`scripts/assert-main-branch.js`) also blocks a manual
 
 ## Adding a new AI adapter (e.g. OpenAI, Anthropic, MCP)
 
+There are two base classes depending on what the target actually needs:
+
+- **`BaseAiAdapter`** (`src/adapters/shared/base-ai-adapter.ts`) — for frameworks that consume a
+  Zod schema (Langchain, Vercel AI). Gives you `this.buildSchema(toolDef)`,
+  `this.safeToolName(name)`, and `this.run(toolName, args)`; implement `getTools()`.
+- **`BaseNativeToolAdapter<TTool>`** (`src/adapters/shared/base-native-tool-adapter.ts`) — for
+  providers whose tool format is plain JSON with no SDK types needed (OpenAI, Anthropic). It
+  already implements `getTools()` and `executeToolCall(name, args)` (mapping the provider's
+  echoed tool name back to the right OpenAPI operation); you only implement
+  `buildTool(name, toolDef)` to serialize one tool into the provider's wire format. If your
+  target genuinely needs no SDK import, this base class means the adapter needs **no new peer
+  dependency at all** — see `src/adapters/openai/openai.adapter.ts` for the pattern.
+
+Either way:
+
 1. Create `src/adapters/<name>/<name>.adapter.ts`.
-2. Extend `BaseAiAdapter` from `src/adapters/shared/base-ai-adapter.ts` — it gives you
-   `this.buildSchema(parameters)`, `this.safeToolName(name)`, and `this.run(toolName, args)`.
-   You only need to implement `getTools()` in the shape your target framework expects.
-3. Add a barrel `src/adapters/<name>/index.ts` exporting your adapter.
-4. Register a new build entry in `tsup.config.ts` and, if your adapter depends on a
-   framework package (e.g. `openai`, `@anthropic-ai/sdk`), add it to `peerDependencies`
-   **and** `peerDependenciesMeta` (as `optional: true`) in `package.json` — see the
-   existing `ai`/`@langchain/core`/`@nestjs/common` entries as the pattern to copy.
-5. Add a spec file next to your adapter covering schema generation and tool execution
+2. Add a barrel `src/adapters/<name>/index.ts` exporting your adapter.
+3. Register a new build entry in `tsup.config.ts` and, if (and only if) your adapter depends on
+   a framework package (e.g. `@langchain/core`, `@modelcontextprotocol/sdk`), add it to
+   `peerDependencies` **and** `peerDependenciesMeta` (as `optional: true`) in `package.json` —
+   see the existing `ai`/`@langchain/core`/`@nestjs/common` entries as the pattern to copy.
+4. Add a spec file next to your adapter covering schema generation and tool execution
    wiring.
-6. Document the new adapter's usage in `README.md`.
+5. Document the new adapter's usage in `README.md`.
 
 ## Adding a new auth/security strategy
 
