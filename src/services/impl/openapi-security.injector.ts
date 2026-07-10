@@ -2,9 +2,14 @@ import { DynamicProviderAuthType } from '@/types';
 import { IOpenApiSecurityInjector } from '@/services/openapi-security-injector.interface';
 import { ILogger } from '@/types/logger';
 import { DEFAULT_LOGGER } from '@/utils/logger';
+import { SecurityStrategyRegistry, createDefaultSecurityStrategyRegistry } from './security';
+import { encodeBasicAuthHeader } from './security/basic-auth.util';
 
 export class OpenApiSecurityInjector implements IOpenApiSecurityInjector {
-  constructor(private readonly logger: ILogger = DEFAULT_LOGGER) {}
+  constructor(
+    private readonly logger: ILogger = DEFAULT_LOGGER,
+    private readonly registry: SecurityStrategyRegistry = createDefaultSecurityStrategyRegistry()
+  ) {}
 
   inject(
     spec: Record<string, unknown>,
@@ -44,49 +49,19 @@ export class OpenApiSecurityInjector implements IOpenApiSecurityInjector {
         const scheme = securitySchemes[schemeName] as Record<string, unknown> | undefined;
         if (!scheme) continue;
 
-        if (scheme.type === 'apiKey' && (authType === DynamicProviderAuthType.API_KEY || !authType)) {
-          if (scheme.in === 'header') {
-            let finalToken = accessToken;
-            if (String(scheme.name).toLowerCase() === 'authorization' && !accessToken.toLowerCase().startsWith('bearer ') && !accessToken.toLowerCase().startsWith('basic ')) {
-              if (accessToken.startsWith('eyJ') || String(scheme['x-bearer-format']).toLowerCase() === 'bearer') {
-                finalToken = `Bearer ${accessToken}`;
-              }
-            }
-            headers[String(scheme.name)] = finalToken;
+        const candidates = this.registry.getStrategiesFor(String(scheme.type));
+        for (const strategy of candidates) {
+          if (!strategy.supportsAuthType(authType)) continue;
+          if (strategy.inject({ scheme, schemeName, accessToken, headers, queryParams, authType })) {
             injected = true;
-          } else if (scheme.in === 'query') {
-            queryParams[String(scheme.name)] = accessToken;
-            injected = true;
+            this.logger.debug?.(`Successfully injected API Key using scheme: ${schemeName} (Type: ${scheme.type})`);
+            break;
           }
-        } 
-        else if (scheme.type === 'http' && (authType === DynamicProviderAuthType.BEARER || authType === DynamicProviderAuthType.BASIC || !authType)) {
-          if (String(scheme.scheme).toLowerCase() === 'bearer' && (authType === DynamicProviderAuthType.BEARER || !authType)) {
-            headers['Authorization'] = `Bearer ${accessToken}`;
-            injected = true;
-          } else if (String(scheme.scheme).toLowerCase() === 'basic' && (authType === DynamicProviderAuthType.BASIC || !authType)) {
-            const isBase64 = Buffer.from(accessToken, 'base64').toString('base64') === accessToken;
-            const encoded = isBase64 ? accessToken : Buffer.from(accessToken).toString('base64');
-            headers['Authorization'] = `Basic ${encoded}`;
-            injected = true;
-          }
-        }
-        else if ((scheme.type === 'oauth2' || scheme.type === 'openIdConnect') && (authType === DynamicProviderAuthType.OAUTH2 || authType === DynamicProviderAuthType.BEARER || !authType)) {
-          headers['Authorization'] = `Bearer ${accessToken}`;
-          injected = true;
-        }
-        else if (scheme.type === 'basic' && (authType === DynamicProviderAuthType.BASIC || !authType)) {
-          const isBase64 = Buffer.from(accessToken, 'base64').toString('base64') === accessToken;
-          const encoded = isBase64 ? accessToken : Buffer.from(accessToken).toString('base64');
-          headers['Authorization'] = `Basic ${encoded}`;
-          injected = true;
         }
 
-        if (injected) {
-          this.logger.debug?.(`Successfully injected API Key using scheme: ${schemeName} (Type: ${scheme.type})`);
-          break;
-        }
+        if (injected) break;
       }
-      
+
       if (injected) break;
     }
 
@@ -107,9 +82,7 @@ export class OpenApiSecurityInjector implements IOpenApiSecurityInjector {
     if (authType === DynamicProviderAuthType.API_KEY) {
       queryParams['api_key'] = accessToken;
     } else if (authType === DynamicProviderAuthType.BASIC) {
-      const isBase64 = Buffer.from(accessToken, 'base64').toString('base64') === accessToken;
-      const encoded = isBase64 ? accessToken : Buffer.from(accessToken).toString('base64');
-      headers['Authorization'] = `Basic ${encoded}`;
+      headers['Authorization'] = encodeBasicAuthHeader(accessToken);
     } else {
       headers['Authorization'] = `Bearer ${accessToken}`;
     }
