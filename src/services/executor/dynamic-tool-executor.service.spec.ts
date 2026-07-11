@@ -310,6 +310,80 @@ describe('DynamicToolExecutorService', () => {
     });
   });
 
+  describe('observability hooks', () => {
+    const mockSpec = {
+      servers: [{ url: 'https://api.example.com' }],
+      paths: { '/users': { get: { operationId: 'getUsers' } } },
+    };
+
+    it('calls onRequestStart then onRequestEnd with a matching requestId on success', async () => {
+      (axios as unknown as jest.Mock).mockResolvedValue({ data: { ok: true }, status: 200 });
+      const onRequestStart = jest.fn();
+      const onRequestEnd = jest.fn();
+
+      await service.execute(mockSpec, 'getUsers', {}, { hooks: { onRequestStart, onRequestEnd } });
+
+      expect(onRequestStart).toHaveBeenCalledWith({ requestId: expect.any(String), toolName: 'getUsers' });
+      const { requestId } = onRequestStart.mock.calls[0][0];
+      expect(onRequestEnd).toHaveBeenCalledWith({
+        requestId,
+        toolName: 'getUsers',
+        durationMs: expect.any(Number),
+        success: true,
+        statusCode: 200,
+      });
+    });
+
+    it('calls onRequestEnd with success:false and the failing statusCode', async () => {
+      (axios as unknown as jest.Mock).mockRejectedValue({ response: { status: 500, data: 'boom' }, config: {} });
+      const onRequestEnd = jest.fn();
+
+      await expect(service.execute(mockSpec, 'getUsers', {}, { hooks: { onRequestEnd } })).rejects.toThrow(ToolExecutionError);
+
+      expect(onRequestEnd).toHaveBeenCalledWith(expect.objectContaining({ success: false, statusCode: 500 }));
+    });
+
+    it('calls onRetry once per retry attempt with the same requestId as onRequestStart', async () => {
+      const error = { response: { status: 503, data: 'Service Unavailable' }, config: {} };
+      (axios as unknown as jest.Mock)
+        .mockRejectedValueOnce(error)
+        .mockResolvedValueOnce({ data: { ok: true }, status: 200 });
+      const onRequestStart = jest.fn();
+      const onRetry = jest.fn();
+
+      await service.execute(mockSpec, 'getUsers', {}, { retry: { maxRetries: 1, retryDelayMs: 1 }, hooks: { onRequestStart, onRetry } });
+
+      const { requestId } = onRequestStart.mock.calls[0][0];
+      expect(onRetry).toHaveBeenCalledWith({ requestId, toolName: 'getUsers', attempt: 1, statusCode: 503, delayMs: expect.any(Number) });
+    });
+
+    it('does not let a throwing hook break the tool call, and logs it instead', async () => {
+      (axios as unknown as jest.Mock).mockResolvedValue({ data: { ok: true }, status: 200 });
+      const onRequestStart = jest.fn(() => {
+        throw new Error('consumer hook bug');
+      });
+
+      const result = await service.execute(mockSpec, 'getUsers', {}, { hooks: { onRequestStart } });
+
+      expect(result).toEqual({ ok: true });
+    });
+
+    it('gives concurrent executeMany calls to the same tool distinct requestIds', async () => {
+      (axios as unknown as jest.Mock).mockResolvedValue({ data: { ok: true }, status: 200 });
+      const onRequestStart = jest.fn();
+
+      await service.executeMany(
+        mockSpec,
+        [{ toolName: 'getUsers', args: {} }, { toolName: 'getUsers', args: {} }],
+        { hooks: { onRequestStart } }
+      );
+
+      const firstCallId = onRequestStart.mock.calls[0][0].requestId;
+      const secondCallId = onRequestStart.mock.calls[1][0].requestId;
+      expect(firstCallId).not.toBe(secondCallId);
+    });
+  });
+
   describe('namespace', () => {
     const mockSpec = {
       servers: [{ url: 'https://api.example.com' }],

@@ -405,6 +405,28 @@ Third-party APIs are flaky. Three independent knobs handle this without any extr
 
 ---
 
+## 📡 Observability Hooks
+
+Production needs to know which tool is slow, which one keeps failing, and what's in flight right
+now. `options.hooks` adds three synchronous callbacks, so you can wire this into OpenTelemetry,
+Datadog, or a plain log line — the library has no opinion on which:
+
+```ts
+await agent.executeTool(spec, 'getInvoice', args, {
+  hooks: {
+    onRequestStart: ({ requestId, toolName }) => span.start(requestId, toolName),
+    onRequestEnd: ({ requestId, durationMs, success, statusCode }) => span.end(requestId, { durationMs, success, statusCode }),
+    onRetry: ({ toolName, attempt, statusCode, delayMs }) => metrics.increment('tool_retry', { toolName, attempt, statusCode, delayMs }),
+  },
+});
+```
+
+Every event for one call carries the same `requestId`, so `onRequestStart`/`onRequestEnd`/`onRetry`
+can be correlated even when `executeMany` runs the same tool name concurrently more than once. A
+hook that throws is caught and logged — it can never fail or slow down the actual tool call.
+
+---
+
 ## 🔑 OAuth2 Token Management
 
 Two `ExecuteToolOptions` hooks cover the two OAuth2 grant types this library supports end-to-end.

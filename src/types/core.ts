@@ -69,6 +69,31 @@ export interface RetryOptions {
   retryOnNetworkError?: boolean;
 }
 
+export interface RequestStartInfo {
+  /** Correlates this call's start/end/retry events — needed because executeMany can run the same toolName concurrently more than once. */
+  requestId: string;
+  toolName: string;
+}
+
+export interface RequestEndInfo extends RequestStartInfo {
+  durationMs: number;
+  success: boolean;
+  statusCode?: number;
+}
+
+export interface RetryInfo extends RequestStartInfo {
+  /** 1-based: the attempt that just failed and is about to be retried. */
+  attempt: number;
+  delayMs: number;
+  statusCode?: number;
+}
+
+export interface ObservabilityHooks {
+  onRequestStart?: (info: RequestStartInfo) => void;
+  onRequestEnd?: (info: RequestEndInfo) => void;
+  onRetry?: (info: RetryInfo) => void;
+}
+
 export interface ExecuteToolOptions {
   authType?: DynamicProviderAuthType;
   accessToken?: string;
@@ -81,6 +106,8 @@ export interface ExecuteToolOptions {
   retry?: RetryOptions;
   /** Must match the namespace passed to parseAndFlatten() for this tool, so its name can be resolved back to the OpenAPI operation. */
   namespace?: string;
+  /** Synchronous callbacks for wiring into an APM/tracing tool of the caller's choice. A throwing hook is caught and logged — it never fails the tool call. */
+  hooks?: ObservabilityHooks;
 }
 
 export interface IAiAdapter<TTool = unknown, TReturnType = TTool[]> {
