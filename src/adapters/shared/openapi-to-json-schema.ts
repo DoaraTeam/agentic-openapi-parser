@@ -12,11 +12,15 @@ export function deriveMethodAnnotations(method: string): { readOnlyHint: boolean
  * Strips/rewrites JSON Schema keywords that strict-mode function-calling parsers (e.g. OpenAI)
  * reject or mishandle: `type: 'file'` isn't valid JSON Schema, `default`/`example`/`pattern`/
  * `min*`/`max*` keywords commonly trip strict validators, and explicit `null` values are rejected
- * outright. Recurses into `properties` and `items` only (not `anyOf`/`oneOf`/`allOf`).
+ * outright. Recurses into `properties`, `items`, and `oneOf`/`anyOf`/`allOf` branches, with a
+ * cycle guard for specs where SwaggerParser.dereference() has produced a genuinely
+ * self-referential schema object (a real object cycle, not just a repeated `$ref` string).
  */
-export function sanitizeJsonSchema(schema: unknown): unknown {
-  if (Array.isArray(schema)) return schema.map(sanitizeJsonSchema);
+export function sanitizeJsonSchema(schema: unknown, seen: WeakSet<object> = new WeakSet()): unknown {
+  if (Array.isArray(schema)) return schema.map((item) => sanitizeJsonSchema(item, seen));
   if (!schema || typeof schema !== 'object') return schema;
+  if (seen.has(schema)) return { type: 'object', description: '(circular schema reference)' };
+  seen.add(schema);
 
   const result: Record<string, unknown> = { ...(schema as Record<string, unknown>) };
 
@@ -42,13 +46,19 @@ export function sanitizeJsonSchema(schema: unknown): unknown {
   if (result.properties && typeof result.properties === 'object') {
     const sanitizedProps: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(result.properties as Record<string, unknown>)) {
-      sanitizedProps[key] = sanitizeJsonSchema(value);
+      sanitizedProps[key] = sanitizeJsonSchema(value, seen);
     }
     result.properties = sanitizedProps;
   }
 
   if (result.items) {
-    result.items = sanitizeJsonSchema(result.items);
+    result.items = sanitizeJsonSchema(result.items, seen);
+  }
+
+  for (const key of ['oneOf', 'anyOf', 'allOf'] as const) {
+    if (Array.isArray(result[key])) {
+      result[key] = (result[key] as unknown[]).map((item) => sanitizeJsonSchema(item, seen));
+    }
   }
 
   return result;

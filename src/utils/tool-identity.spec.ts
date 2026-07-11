@@ -22,6 +22,22 @@ describe('deriveToolName', () => {
   it('falls back to unknown_tool for an empty-after-sanitize name', () => {
     expect(deriveToolName('get', '', '___')).toBe('unknown_tool');
   });
+
+  it('does not collide when two long operationIds only differ after character 64 (real GitHub spec bug)', () => {
+    // Real operationIds from github/rest-api-description that used to derive the exact same
+    // 64-character truncated name before this fix.
+    const first = deriveToolName('patch', '/orgs/{org}/properties/schema', 'orgs/custom-properties-for-repos-create-or-update-organization-definitions');
+    const second = deriveToolName('put', '/orgs/{org}/properties/schema/{custom_property_name}', 'orgs/custom-properties-for-repos-create-or-update-organization-definition');
+
+    expect(first).not.toBe(second);
+    expect(first.length).toBeLessThanOrEqual(64);
+    expect(second.length).toBeLessThanOrEqual(64);
+  });
+
+  it('is deterministic: the same long operationId always derives the same truncated name', () => {
+    const longId = 'x'.repeat(100);
+    expect(deriveToolName('get', '/x', longId)).toBe(deriveToolName('get', '/x', longId));
+  });
 });
 
 describe('iterateOperations', () => {

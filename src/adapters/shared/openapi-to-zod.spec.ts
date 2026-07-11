@@ -86,6 +86,39 @@ describe('jsonSchemaToZod', () => {
     (selfRef.properties as Record<string, unknown>).child = selfRef;
     expect(() => jsonSchemaToZod(selfRef)).not.toThrow();
   });
+
+  it('builds a discriminated-style oneOf as a real union, not a fallback string', () => {
+    const schema = jsonSchemaToZod({
+      oneOf: [
+        { type: 'object', properties: { petType: { type: 'string', enum: ['dog'] }, breed: { type: 'string' } }, required: ['petType'] },
+        { type: 'object', properties: { petType: { type: 'string', enum: ['cat'] }, livesLeft: { type: 'integer' } }, required: ['petType'] },
+      ],
+    });
+
+    expect(schema.safeParse({ petType: 'dog', breed: 'husky' }).success).toBe(true);
+    expect(schema.safeParse({ petType: 'cat', livesLeft: 9 }).success).toBe(true);
+    // A oneOf must not silently degrade into "accepts any string" (the pre-fix behavior).
+    expect(schema.safeParse('hello').success).toBe(false);
+  });
+
+  it('builds anyOf as a union the same way as oneOf', () => {
+    const schema = jsonSchemaToZod({ anyOf: [{ type: 'string' }, { type: 'integer' }] });
+    expect(schema.safeParse('hi').success).toBe(true);
+    expect(schema.safeParse(42).success).toBe(true);
+    expect(schema.safeParse(true).success).toBe(false);
+  });
+
+  it('merges allOf object schemas into one combined shape', () => {
+    const schema = jsonSchemaToZod({
+      allOf: [
+        { type: 'object', properties: { id: { type: 'integer' } }, required: ['id'] },
+        { type: 'object', properties: { name: { type: 'string' } }, required: ['name'] },
+      ],
+    });
+
+    expect(schema.safeParse({ id: 1, name: 'Alice' }).success).toBe(true);
+    expect(schema.safeParse({ id: 1 }).success).toBe(false); // missing "name" from the second member
+  });
 });
 
 describe('buildZodSchemaForTool', () => {
