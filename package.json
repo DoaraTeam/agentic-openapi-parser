@@ -23,6 +23,7 @@
   },
   "scripts": {
     "test": "jest",
+    "test:coverage": "jest --coverage",
     "build": "tsup",
     "dev": "tsup --watch",
     "lint": "eslint src",
