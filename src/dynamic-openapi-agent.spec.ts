@@ -3,7 +3,7 @@ jest.mock('axios', () => ({
   default: jest.fn().mockResolvedValue({ data: { ok: true } }),
 }));
 
-import { DynamicOpenApiAgent } from './index';
+import { DynamicOpenApiAgent } from './dynamic-openapi-agent';
 import { IDynamicToolExecutorService } from '@/services';
 
 describe('DynamicOpenApiAgent', () => {
