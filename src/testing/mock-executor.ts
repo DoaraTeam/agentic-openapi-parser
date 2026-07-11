@@ -1,4 +1,4 @@
-import type { ExecuteToolOptions } from '@/types';
+import type { ExecuteToolOptions, ToolCallRequest, ToolCallOutcome } from '@/types';
 import type { IDynamicToolExecutorService } from '@/services';
 import { ToolNotFoundError } from '@/errors';
 
@@ -23,21 +23,35 @@ export interface MockExecutor extends IDynamicToolExecutorService {
 export function createMockExecutor(responses: Record<string, MockToolResponse> = {}): MockExecutor {
   const calls: MockExecutorCall[] = [];
 
-  return {
-    calls,
-    async execute(_spec, toolName, args, options) {
-      calls.push({ toolName, args, options });
+  const execute: MockExecutor['execute'] = async (_spec, toolName, args, options) => {
+    calls.push({ toolName, args, options });
 
-      if (!(toolName in responses)) {
-        throw new ToolNotFoundError(toolName);
-      }
+    if (!(toolName in responses)) {
+      throw new ToolNotFoundError(toolName);
+    }
 
-      const response = responses[toolName];
-      if (response instanceof Error) throw response;
-      if (typeof response === 'function') {
-        return (response as (args: Record<string, unknown>, options?: ExecuteToolOptions) => unknown | Promise<unknown>)(args, options);
-      }
-      return response;
-    },
+    const response = responses[toolName];
+    if (response instanceof Error) throw response;
+    if (typeof response === 'function') {
+      return (response as (args: Record<string, unknown>, options?: ExecuteToolOptions) => unknown | Promise<unknown>)(args, options);
+    }
+    return response;
   };
+
+  const executeMany = async (
+    spec: Record<string, unknown>,
+    requests: ToolCallRequest[],
+    options?: ExecuteToolOptions
+  ): Promise<ToolCallOutcome[]> => {
+    const settled = await Promise.allSettled(requests.map((request) => execute(spec, request.toolName, request.args, options)));
+
+    return settled.map((outcome, index) => {
+      const toolName = requests[index]!.toolName;
+      return outcome.status === 'fulfilled'
+        ? { toolName, status: 'fulfilled', value: outcome.value }
+        : { toolName, status: 'rejected', reason: outcome.reason };
+    });
+  };
+
+  return { calls, execute, executeMany };
 }

@@ -86,3 +86,12 @@ export interface ExecuteToolOptions {
 export interface IAiAdapter<TTool = unknown, TReturnType = TTool[]> {
   getTools(): TReturnType;
 }
+
+export interface ToolCallRequest {
+  toolName: string;
+  args: Record<string, unknown>;
+}
+
+export type ToolCallOutcome =
+  | { toolName: string; status: 'fulfilled'; value: unknown }
+  | { toolName: string; status: 'rejected'; reason: unknown };

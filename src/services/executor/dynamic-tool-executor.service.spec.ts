@@ -340,6 +340,75 @@ describe('DynamicToolExecutorService', () => {
     });
   });
 
+  describe('executeMany', () => {
+    const mockSpec = {
+      servers: [{ url: 'https://api.example.com' }],
+      paths: {
+        '/users': { get: { operationId: 'getUsers' } },
+        '/orders': { get: { operationId: 'getOrders' } },
+      },
+    };
+
+    it('runs multiple tool calls and returns results in call order', async () => {
+      (axios as unknown as jest.Mock)
+        .mockResolvedValueOnce({ data: { users: [] } })
+        .mockResolvedValueOnce({ data: { orders: [] } });
+
+      const outcomes = await service.executeMany(mockSpec, [
+        { toolName: 'getUsers', args: {} },
+        { toolName: 'getOrders', args: {} },
+      ]);
+
+      expect(outcomes).toEqual([
+        { toolName: 'getUsers', status: 'fulfilled', value: { users: [] } },
+        { toolName: 'getOrders', status: 'fulfilled', value: { orders: [] } },
+      ]);
+    });
+
+    it('does not let one failing call affect the others, and preserves order', async () => {
+      (axios as unknown as jest.Mock)
+        .mockResolvedValueOnce({ data: { users: [] } })
+        .mockRejectedValueOnce({ response: { status: 500, data: 'boom' }, config: {} });
+
+      const outcomes = await service.executeMany(mockSpec, [
+        { toolName: 'getUsers', args: {} },
+        { toolName: 'getOrders', args: {} },
+      ]);
+
+      expect(outcomes[0]).toEqual({ toolName: 'getUsers', status: 'fulfilled', value: { users: [] } });
+      expect(outcomes[1]?.toolName).toBe('getOrders');
+      expect(outcomes[1]?.status).toBe('rejected');
+      expect((outcomes[1] as { reason: unknown }).reason).toBeInstanceOf(ToolExecutionError);
+    });
+
+    it('rejects the whole batch outcome for an unknown tool name, without touching other calls', async () => {
+      (axios as unknown as jest.Mock).mockResolvedValueOnce({ data: { users: [] } });
+
+      const outcomes = await service.executeMany(mockSpec, [
+        { toolName: 'getUsers', args: {} },
+        { toolName: 'deleteEverything', args: {} },
+      ]);
+
+      expect(outcomes[0]).toEqual({ toolName: 'getUsers', status: 'fulfilled', value: { users: [] } });
+      expect(outcomes[1]?.status).toBe('rejected');
+      expect((outcomes[1] as { reason: unknown }).reason).toBeInstanceOf(ToolNotFoundError);
+    });
+
+    it('shares the same options across every call in the batch', async () => {
+      (axios as unknown as jest.Mock).mockResolvedValue({ data: { ok: true } });
+
+      await service.executeMany(
+        mockSpec,
+        [{ toolName: 'getUsers', args: {} }, { toolName: 'getOrders', args: {} }],
+        { accessToken: 'shared-token' }
+      );
+
+      expect(mockSecurityInjector.inject).toHaveBeenCalledTimes(2);
+      expect(mockSecurityInjector.inject).toHaveBeenNthCalledWith(1, mockSpec, expect.anything(), 'shared-token', expect.any(Object), expect.any(Object), undefined);
+      expect(mockSecurityInjector.inject).toHaveBeenNthCalledWith(2, mockSpec, expect.anything(), 'shared-token', expect.any(Object), expect.any(Object), undefined);
+    });
+  });
+
   describe('concurrency', () => {
     it('caps concurrent requests through this executor instance', async () => {
       const mockSpec = {
@@ -364,6 +433,36 @@ describe('DynamicToolExecutorService', () => {
       );
 
       await Promise.all(Array.from({ length: 5 }, () => limitedService.execute(mockSpec, 'getUsers', {})));
+
+      expect(maxActive).toBeLessThanOrEqual(2);
+    });
+
+    it('caps concurrency for executeMany too, since it runs each call through execute()', async () => {
+      const mockSpec = {
+        servers: [{ url: 'https://api.example.com' }],
+        paths: { '/users': { get: { operationId: 'getUsers' } } },
+      };
+
+      let active = 0;
+      let maxActive = 0;
+      (axios as unknown as jest.Mock).mockImplementation(async () => {
+        active++;
+        maxActive = Math.max(maxActive, active);
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        active--;
+        return { data: { ok: true } };
+      });
+
+      const limitedService = new DynamicToolExecutorService(
+        mockSecurityInjector,
+        { log: jest.fn(), error: jest.fn(), warn: jest.fn(), debug: jest.fn() },
+        { maxConcurrency: 2 }
+      );
+
+      await limitedService.executeMany(
+        mockSpec,
+        Array.from({ length: 5 }, () => ({ toolName: 'getUsers', args: {} }))
+      );
 
       expect(maxActive).toBeLessThanOrEqual(2);
     });

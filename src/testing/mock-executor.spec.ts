@@ -48,4 +48,34 @@ describe('createMockExecutor', () => {
       { toolName: 'listPets', args: {}, options: undefined },
     ]);
   });
+
+  describe('executeMany', () => {
+    it('resolves every call and preserves order, recording each in executor.calls', async () => {
+      const executor = createMockExecutor({ getPet: { id: 1 }, listPets: [] });
+
+      const outcomes = await executor.executeMany({}, [
+        { toolName: 'getPet', args: { petId: 1 } },
+        { toolName: 'listPets', args: {} },
+      ]);
+
+      expect(outcomes).toEqual([
+        { toolName: 'getPet', status: 'fulfilled', value: { id: 1 } },
+        { toolName: 'listPets', status: 'fulfilled', value: [] },
+      ]);
+      expect(executor.calls).toHaveLength(2);
+    });
+
+    it('reports one failing call as rejected without affecting the others', async () => {
+      const failure = new Error('upstream 500');
+      const executor = createMockExecutor({ getPet: { id: 1 }, deletePet: failure });
+
+      const outcomes = await executor.executeMany({}, [
+        { toolName: 'getPet', args: {} },
+        { toolName: 'deletePet', args: {} },
+      ]);
+
+      expect(outcomes[0]).toEqual({ toolName: 'getPet', status: 'fulfilled', value: { id: 1 } });
+      expect(outcomes[1]).toEqual({ toolName: 'deletePet', status: 'rejected', reason: failure });
+    });
+  });
 });

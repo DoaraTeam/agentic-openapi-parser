@@ -378,6 +378,31 @@ Third-party APIs are flaky. Three independent knobs handle this without any extr
   Pass this executor into `DynamicOpenApiAgent`'s constructor overrides (see
   [Overriding facade pieces](#overriding-facade-pieces)) to wire it into the facade.
 
+- **`executeMany` for parallel tool calls** — an LLM turn often returns several `tool_calls` at
+  once (OpenAI and Anthropic both support this). `executeMany` runs them concurrently through the
+  same `execute()` path — so retry, security injection, response processors, and the concurrency
+  limit above all apply per call — and returns one outcome per call, in the same order they were
+  given, without letting one failure affect the others:
+
+  ```ts
+  const outcomes = await agent.executeMany(spec, [
+    { toolName: 'getInvoice', args: { id: 1 } },
+    { toolName: 'getInvoice', args: { id: 2 } },
+  ]);
+
+  for (const outcome of outcomes) {
+    if (outcome.status === 'fulfilled') {
+      console.log(outcome.toolName, outcome.value);
+    } else {
+      console.error(outcome.toolName, outcome.reason); // e.g. a ToolExecutionError
+    }
+  }
+  ```
+
+  This mirrors the shape of [`Promise.allSettled`](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Promise/allSettled)
+  (`status`/`value`/`reason`) plus a `toolName` so you don't have to cross-reference the original
+  call array by index.
+
 ---
 
 ## 🔑 OAuth2 Token Management

@@ -13,7 +13,7 @@ describe('LangchainToolAdapter', () => {
   ];
 
   it('produces one DynamicStructuredTool per tool definition with a sanitized name', () => {
-    const executor = { execute: jest.fn().mockResolvedValue({ id: 1 }) };
+    const executor = { execute: jest.fn().mockResolvedValue({ id: 1 }), executeMany: jest.fn() };
     const adapter = new LangchainToolAdapter(executor, {}, toolsDef);
 
     const tools = adapter.getTools();
@@ -25,7 +25,7 @@ describe('LangchainToolAdapter', () => {
   });
 
   it('executes via the injected executor and JSON-stringifies the result', async () => {
-    const executor = { execute: jest.fn().mockResolvedValue({ id: 1, name: 'Alice' }) };
+    const executor = { execute: jest.fn().mockResolvedValue({ id: 1, name: 'Alice' }), executeMany: jest.fn() };
     const adapter = new LangchainToolAdapter(executor, { paths: {} }, toolsDef, { accessToken: 'tok' });
 
     const [tool] = adapter.getTools();

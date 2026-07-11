@@ -1,5 +1,5 @@
 import axios, { AxiosError, AxiosRequestConfig, AxiosResponse } from 'axios';
-import { ExecuteToolOptions, ILogger, ResponseProcessor, RetryOptions } from '@/types';
+import { ExecuteToolOptions, ILogger, ResponseProcessor, RetryOptions, ToolCallRequest, ToolCallOutcome } from '@/types';
 import type { IDynamicToolExecutorService, IOpenApiSecurityInjector } from '@/services';
 import { ConcurrencyLimiter, DEFAULT_LOGGER, findOperationByToolName, stripNamespace } from '@/utils';
 import { ResponseProcessingError, ToolExecutionError, ToolNotFoundError } from '@/errors';
@@ -80,6 +80,21 @@ export class DynamicToolExecutorService implements IDynamicToolExecutorService {
     // JMESPath expression) is a caller configuration bug, not a failed HTTP request, and must not
     // be reported through handleExecutionError's Axios-error-shaped formatting.
     return this.applyResponseProcessors(response.data, options?.responseProcessors);
+  }
+
+  async executeMany(
+    spec: Record<string, unknown>,
+    calls: ToolCallRequest[],
+    options?: ExecuteToolOptions
+  ): Promise<ToolCallOutcome[]> {
+    const settled = await Promise.allSettled(calls.map((call) => this.execute(spec, call.toolName, call.args, options)));
+
+    return settled.map((outcome, index) => {
+      const toolName = calls[index]!.toolName;
+      return outcome.status === 'fulfilled'
+        ? { toolName, status: 'fulfilled', value: outcome.value }
+        : { toolName, status: 'rejected', reason: outcome.reason };
+    });
   }
 
   private async sendWithRetry(reqConfig: AxiosRequestConfig, toolName: string, retryOptions?: RetryOptions): Promise<AxiosResponse> {

@@ -14,7 +14,7 @@ describe('AnthropicToolAdapter', () => {
   ];
 
   it('serializes tools into the Anthropic tool-use shape', () => {
-    const executor = { execute: jest.fn() };
+    const executor = { execute: jest.fn(), executeMany: jest.fn() };
     const adapter = new AnthropicToolAdapter(executor, {}, toolsDef);
 
     const tools = adapter.getTools();
@@ -33,14 +33,14 @@ describe('AnthropicToolAdapter', () => {
   });
 
   it('falls back to a generated description when the tool has none', () => {
-    const executor = { execute: jest.fn() };
+    const executor = { execute: jest.fn(), executeMany: jest.fn() };
     const adapter = new AnthropicToolAdapter(executor, {}, [{ ...toolsDef[0]!, description: '' }]);
 
     expect(adapter.getTools()[0]?.description).toBe('Tool for getUserById');
   });
 
   it('executeToolCall resolves the sanitized name back to the original tool and runs it', async () => {
-    const executor = { execute: jest.fn().mockResolvedValue({ id: 1, name: 'Alice' }) };
+    const executor = { execute: jest.fn().mockResolvedValue({ id: 1, name: 'Alice' }), executeMany: jest.fn() };
     const adapter = new AnthropicToolAdapter(executor, { paths: {} }, toolsDef, { accessToken: 'tok' });
 
     const result = await adapter.executeToolCall('getUserById', { id: 1 });
@@ -50,7 +50,7 @@ describe('AnthropicToolAdapter', () => {
   });
 
   it('executeToolCall throws a ToolNotFoundError for an unknown tool name', async () => {
-    const executor = { execute: jest.fn() };
+    const executor = { execute: jest.fn(), executeMany: jest.fn() };
     const adapter = new AnthropicToolAdapter(executor, {}, toolsDef);
 
     await expect(adapter.executeToolCall('doesNotExist', {})).rejects.toThrow(ToolNotFoundError);

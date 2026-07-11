@@ -25,7 +25,7 @@ describe('McpToolAdapter', () => {
   });
 
   it('registers each tool onto the given server with a sanitized name and description', () => {
-    const executor = { execute: jest.fn() };
+    const executor = { execute: jest.fn(), executeMany: jest.fn() };
     const adapter = new McpToolAdapter(executor, {}, toolsDef);
     const server = { registerTool: registerToolMock } as never;
 
@@ -39,7 +39,7 @@ describe('McpToolAdapter', () => {
   });
 
   it('handler executes via the injected executor and returns MCP content shape', async () => {
-    const executor = { execute: jest.fn().mockResolvedValue({ id: 1, name: 'Alice' }) };
+    const executor = { execute: jest.fn().mockResolvedValue({ id: 1, name: 'Alice' }), executeMany: jest.fn() };
     const adapter = new McpToolAdapter(executor, { paths: {} }, toolsDef, { accessToken: 'tok' });
     const server = { registerTool: registerToolMock } as never;
 
@@ -53,7 +53,7 @@ describe('McpToolAdapter', () => {
   });
 
   it('handler catches executor errors and returns isError content instead of throwing', async () => {
-    const executor = { execute: jest.fn().mockRejectedValue(new Error('boom')) };
+    const executor = { execute: jest.fn().mockRejectedValue(new Error('boom')), executeMany: jest.fn() };
     const adapter = new McpToolAdapter(executor, {}, toolsDef);
     const server = { registerTool: registerToolMock } as never;
 
@@ -66,7 +66,7 @@ describe('McpToolAdapter', () => {
   });
 
   it('createServer builds a fresh McpServer and registers tools on it', () => {
-    const executor = { execute: jest.fn() };
+    const executor = { execute: jest.fn(), executeMany: jest.fn() };
     const adapter = new McpToolAdapter(executor, {}, toolsDef);
 
     const server = adapter.createServer({ name: 'test-server', version: '1.0.0' });
