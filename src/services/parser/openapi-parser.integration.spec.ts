@@ -229,3 +229,63 @@ describe('OpenApiParserService integration (hand-written polymorphic + circular 
     expect(requestBodySchema.oneOf).toHaveLength(2);
   });
 });
+
+/**
+ * Petstore (19 operations) and the polymorphic/circular fixture (2 operations) are both small —
+ * neither says anything about behavior at the scale that #3 (tool filtering) and #9 (semantic
+ * search) exist specifically to address: real specs with hundreds of operations. This fixture is
+ * the real GitHub REST API spec (github/rest-api-description, fetched 2026-07-11) with every
+ * parameter/requestBody schema stripped down to a trivial $ref-free stub — keeping ~1200 real
+ * operationIds/tags/paths/methods (what scale and filtering actually exercise) while avoiding the
+ * multi-hundred-KB-per-endpoint blowup a fully dereferenced GitHub/Stripe subset produced earlier
+ * (see the note above this file's first describe block).
+ */
+describe('OpenApiParserService integration (real GitHub spec at scale, ~1200 operations)', () => {
+  const fixturePath = `${process.cwd()}/src/services/parser/__fixtures__/github-scale.openapi.json`;
+  let service: OpenApiParserService;
+
+  beforeEach(() => {
+    service = new OpenApiParserService({ log: jest.fn(), error: jest.fn(), warn: jest.fn(), debug: jest.fn() });
+  });
+
+  it('parses all ~1200 real GitHub operations without throwing, in reasonable time', async () => {
+    const start = Date.now();
+    const { tools } = await service.parseAndFlatten(fixturePath);
+    const elapsedMs = Date.now() - start;
+
+    expect(tools).toHaveLength(1196);
+    expect(elapsedMs).toBeLessThan(5000); // generous bound — a real machine should be far faster
+  });
+
+  it('derives a unique tool name for every one of the ~1200 real operations (no collisions)', async () => {
+    const { tools } = await service.parseAndFlatten(fixturePath);
+    const names = tools.map((t) => t.name);
+    expect(new Set(names).size).toBe(names.length);
+  });
+
+  it('filters down to the real "issues" tag correctly at scale (55 real operations)', async () => {
+    const { tools } = await service.parseAndFlatten(fixturePath, undefined, { includeTags: ['issues'] });
+
+    expect(tools).toHaveLength(55);
+    expect(tools.every((t) => t.tags?.includes('issues'))).toBe(true);
+  });
+
+  it('combines a real tag filter with a real operationId glob filter at scale', async () => {
+    const { tools } = await service.parseAndFlatten(fixturePath, undefined, {
+      includeTags: ['repos'],
+      includeOperationIds: ['repos_get*'],
+    });
+
+    // Verified against the real fixture: 203 "repos"-tagged operations, 63 of which derive a
+    // tool name starting with "repos_get" (operationId "repos/get..." sanitized to "repos_get...").
+    expect(tools).toHaveLength(63);
+    expect(tools.every((t) => t.tags?.includes('repos') && t.name.startsWith('repos_get'))).toBe(true);
+  });
+
+  it('applies a namespace prefix correctly across all ~1200 real tool names', async () => {
+    const { tools } = await service.parseAndFlatten(fixturePath, undefined, undefined, 'gh');
+
+    expect(tools).toHaveLength(1196);
+    expect(tools.every((t) => t.name.startsWith('gh__'))).toBe(true);
+  });
+});

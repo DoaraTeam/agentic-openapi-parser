@@ -1,4 +1,7 @@
+import { createHash } from 'crypto';
+
 const HTTP_METHODS = ['get', 'post', 'put', 'delete', 'patch', 'options', 'head'] as const;
+const MAX_TOOL_NAME_LENGTH = 64;
 
 export interface OperationLocation {
   path: string;
@@ -9,13 +12,23 @@ export interface OperationLocation {
 /** Single source of truth for turning operationId/method/path into a stable tool name. */
 export function deriveToolName(method: string, path: string, operationId?: string): string {
   const rawName = operationId || `${method}_${path.replace(/[^a-zA-Z0-9]/g, '_')}`;
-  return (
-    rawName
-      .replace(/[^a-zA-Z0-9_-]/g, '_')
-      .replace(/_+/g, '_')
-      .substring(0, 64)
-      .replace(/^_+|_+$/g, '') || 'unknown_tool'
-  );
+  const sanitized = rawName
+    .replace(/[^a-zA-Z0-9_-]/g, '_')
+    .replace(/_+/g, '_')
+    .replace(/^_+|_+$/g, '');
+
+  if (!sanitized) return 'unknown_tool';
+  if (sanitized.length <= MAX_TOOL_NAME_LENGTH) return sanitized;
+
+  // Blindly truncating a name longer than the 64-char limit most AI providers enforce can make
+  // two distinct real operations collide (e.g. two operationIds that only differ after
+  // character 64) — silently executing the wrong operation for one of them. Appending a short
+  // hash of the full sanitized name keeps truncation unique, at the cost of some readability on
+  // names this long.
+  const hash = createHash('sha1').update(sanitized).digest('hex').slice(0, 8);
+  const prefixLength = MAX_TOOL_NAME_LENGTH - hash.length - 1; // "-1" reserves room for the separator
+  const prefix = sanitized.slice(0, prefixLength).replace(/_+$/, '');
+  return `${prefix}_${hash}`;
 }
 
 /** Walks spec.paths once, yielding every {path, method, operation}. */
