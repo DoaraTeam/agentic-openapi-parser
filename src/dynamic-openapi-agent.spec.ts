@@ -24,8 +24,22 @@ describe('DynamicOpenApiAgent', () => {
     expect(inject).toHaveBeenCalledWith(spec, { operationId: 'ping' }, 'tok', expect.any(Object), expect.any(Object), undefined);
   });
 
+  it('delegates executeMany to the underlying executor', async () => {
+    const executeMany = jest.fn().mockResolvedValue([{ toolName: 'ping', status: 'fulfilled', value: 'pong' }]);
+    const agent = new DynamicOpenApiAgent(undefined, { executor: { execute: jest.fn(), executeMany } });
+
+    const spec = { paths: {} };
+    const outcomes = await agent.executeMany(spec, [{ toolName: 'ping', args: {} }], { accessToken: 'tok' });
+
+    expect(executeMany).toHaveBeenCalledWith(spec, [{ toolName: 'ping', args: {} }], { accessToken: 'tok' });
+    expect(outcomes).toEqual([{ toolName: 'ping', status: 'fulfilled', value: 'pong' }]);
+  });
+
   it('returns the exact overridden executor instance from getExecutor()', () => {
-    const customExecutor: IDynamicToolExecutorService = { execute: jest.fn().mockResolvedValue('custom') };
+    const customExecutor: IDynamicToolExecutorService = {
+      execute: jest.fn().mockResolvedValue('custom'),
+      executeMany: jest.fn().mockResolvedValue([]),
+    };
     const agent = new DynamicOpenApiAgent(undefined, { executor: customExecutor });
     expect(agent.getExecutor()).toBe(customExecutor);
   });

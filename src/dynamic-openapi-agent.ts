@@ -1,6 +1,6 @@
 import { OpenApiParserService, OpenApiSecurityInjector, DynamicToolExecutorService } from '@/services';
 import type { IOpenApiParserService, IOpenApiSecurityInjector, IDynamicToolExecutorService } from '@/services';
-import { ExecuteToolOptions, ILogger, ParsedOpenApiSpec } from '@/types';
+import { ExecuteToolOptions, ILogger, ParsedOpenApiSpec, ToolCallOutcome, ToolCallRequest } from '@/types';
 import { DEFAULT_LOGGER } from '@/utils';
 import type { ToolFilterOptions } from '@/utils';
 
@@ -36,5 +36,9 @@ export class DynamicOpenApiAgent {
 
   async executeTool(spec: Record<string, unknown>, toolName: string, args: Record<string, unknown>, options?: ExecuteToolOptions): Promise<unknown> {
     return this.executor.execute(spec, toolName, args, options);
+  }
+
+  async executeMany(spec: Record<string, unknown>, calls: ToolCallRequest[], options?: ExecuteToolOptions): Promise<ToolCallOutcome[]> {
+    return this.executor.executeMany(spec, calls, options);
   }
 }

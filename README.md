@@ -3,10 +3,15 @@
 [![npm version](https://badge.fury.io/js/agentic-openapi.svg)](https://badge.fury.io/js/agentic-openapi)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![TypeScript](https://img.shields.io/badge/TypeScript-Ready-blue.svg)](https://www.typescriptlang.org/)
+[![API Docs](https://img.shields.io/badge/API%20Docs-typedoc-informational.svg)](https://doarateam.github.io/agentic-openapi-parser/)
 
 A highly modular, universal library that dynamically parses OpenAPI/Swagger specifications and turns them into highly structured, AI-ready functions ("Tools"). It securely injects authentication (Bearer, API Keys, Basic Auth, OAuth2) on the fly and provides ready-to-use adapters for the **Vercel AI SDK** and **Langchain**.
 
 This library completely eliminates the need to generate static client code. Your AI agent can directly interact with *any* API given its Swagger/OpenAPI URL!
+
+This README covers usage by example. For the full type reference (every field of
+`ExecuteToolOptions`, every exported class/interface across all subpaths), see the generated
+[API docs](https://doarateam.github.io/agentic-openapi-parser/).
 
 ---
 
@@ -361,7 +366,10 @@ Third-party APIs are flaky. Three independent knobs handle this without any extr
   ```
 
   Only retries idempotent-looking failures (timeouts, 429/5xx, connection resets) — a 4xx client
-  error fails immediately, no retry.
+  error fails immediately, no retry. When a retryable failure's response carries a `Retry-After`
+  header (seconds or an HTTP-date — GitHub and Stripe both send this on `429`s), that value is used
+  as-is instead of the exponential backoff above, since the server is telling you exactly how long
+  to wait.
 
 - **Concurrency limit** — a policy for the *executor instance* rather than a single call, since it
   protects one provider's API from a burst of parallel tool calls (e.g. an LLM turn requesting 20
@@ -377,6 +385,53 @@ Third-party APIs are flaky. Three independent knobs handle this without any extr
 
   Pass this executor into `DynamicOpenApiAgent`'s constructor overrides (see
   [Overriding facade pieces](#overriding-facade-pieces)) to wire it into the facade.
+
+- **`executeMany` for parallel tool calls** — an LLM turn often returns several `tool_calls` at
+  once (OpenAI and Anthropic both support this). `executeMany` runs them concurrently through the
+  same `execute()` path — so retry, security injection, response processors, and the concurrency
+  limit above all apply per call — and returns one outcome per call, in the same order they were
+  given, without letting one failure affect the others:
+
+  ```ts
+  const outcomes = await agent.executeMany(spec, [
+    { toolName: 'getInvoice', args: { id: 1 } },
+    { toolName: 'getInvoice', args: { id: 2 } },
+  ]);
+
+  for (const outcome of outcomes) {
+    if (outcome.status === 'fulfilled') {
+      console.log(outcome.toolName, outcome.value);
+    } else {
+      console.error(outcome.toolName, outcome.reason); // e.g. a ToolExecutionError
+    }
+  }
+  ```
+
+  This mirrors the shape of [`Promise.allSettled`](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Promise/allSettled)
+  (`status`/`value`/`reason`) plus a `toolName` so you don't have to cross-reference the original
+  call array by index.
+
+---
+
+## 📡 Observability Hooks
+
+Production needs to know which tool is slow, which one keeps failing, and what's in flight right
+now. `options.hooks` adds three synchronous callbacks, so you can wire this into OpenTelemetry,
+Datadog, or a plain log line — the library has no opinion on which:
+
+```ts
+await agent.executeTool(spec, 'getInvoice', args, {
+  hooks: {
+    onRequestStart: ({ requestId, toolName }) => span.start(requestId, toolName),
+    onRequestEnd: ({ requestId, durationMs, success, statusCode }) => span.end(requestId, { durationMs, success, statusCode }),
+    onRetry: ({ toolName, attempt, statusCode, delayMs }) => metrics.increment('tool_retry', { toolName, attempt, statusCode, delayMs }),
+  },
+});
+```
+
+Every event for one call carries the same `requestId`, so `onRequestStart`/`onRequestEnd`/`onRetry`
+can be correlated even when `executeMany` runs the same tool name concurrently more than once. A
+hook that throws is caught and logged — it can never fail or slow down the actual tool call.
 
 ---
 
@@ -510,6 +565,40 @@ hard-wired to OpenAI, Cohere, or any specific model. It owns only what's genuine
 right: embedding each tool exactly once, and ranking many `search()` calls against that index by
 cosine similarity without re-embedding anything. By default each tool is embedded as
 `"name description tag1 tag2 ..."` — pass `buildText` to customize that.
+
+---
+
+## 🧪 Testing Helpers
+
+Code that wires an adapter (Langchain, Vercel AI, MCP, OpenAI, Anthropic) to this library still
+needs a `IDynamicToolExecutorService` to construct it. `createMockExecutor` fakes one from a plain
+map of tool name → response, so a consumer's own tests don't need a real spec, a real HTTP call, or
+mocking this library's internals directly:
+
+```ts
+import { createMockExecutor } from 'agentic-openapi-parser/testing';
+import { LangchainToolAdapter } from 'agentic-openapi-parser/adapters/langchain';
+
+const executor = createMockExecutor({
+  getPet: { id: 1, name: 'Rex' },
+  createPet: (args: Record<string, unknown>) => ({ id: 99, ...args }),
+  deletePet: new Error('upstream 500'), // simulates a failed tool call
+});
+
+const adapter = new LangchainToolAdapter(executor, spec, tools);
+// ...invoke a tool through the adapter, then assert on executor.calls:
+expect(executor.calls).toEqual([{ toolName: 'getPet', args: { petId: 1 }, options: undefined }]);
+```
+
+A tool name missing from the response map throws the same `ToolNotFoundError` the real executor
+would, so error-path tests stay realistic. A response can be a static value, a `(args, options) =>
+value` function for dynamic responses, or an `Error` instance to simulate a failed call.
+
+If instead you want to test this library's *own* HTTP behavior (retries, timeouts, real request
+shape) rather than mock it away, intercept at the HTTP layer with
+[`nock`](https://github.com/nock/nock), [`msw`](https://mswjs.io/), or
+[`axios-mock-adapter`](https://github.com/ctimmerm/axios-mock-adapter) instead — `createMockExecutor`
+is deliberately for the opposite case, where the executor itself is a dependency you want to stub out.
 
 ---
 

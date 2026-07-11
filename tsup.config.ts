@@ -13,7 +13,8 @@ export default defineConfig({
     'src/adapters/openai/index.ts',
     'src/adapters/anthropic/index.ts',
     'src/adapters/shared/index.ts',
-    'src/cli/index.ts'
+    'src/cli/index.ts',
+    'src/testing/index.ts'
   ],
   format: ['cjs', 'esm'],
   dts: true,

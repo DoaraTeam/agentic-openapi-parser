@@ -25,9 +25,29 @@ export class RetryPolicy {
     return this.retryableStatusCodes.includes(statusCode);
   }
 
-  /** Exponential backoff with full jitter: a random delay in [0, retryDelayMs * 2^attempt]. */
-  delayFor(attempt: number): number {
+  /**
+   * A server's `Retry-After` value takes priority over our own backoff math — it's the server
+   * telling us exactly how long it wants us to wait. Falls back to exponential backoff with full
+   * jitter (a random delay in [0, retryDelayMs * 2^attempt]) when the header is absent or unparseable.
+   */
+  delayFor(attempt: number, retryAfterHeader?: string): number {
+    const retryAfterMs = this.parseRetryAfter(retryAfterHeader);
+    if (retryAfterMs !== undefined) return retryAfterMs;
+
     const cap = this.retryDelayMs * 2 ** attempt;
     return Math.random() * cap;
+  }
+
+  /** Accepts both forms the header comes in: a delay in seconds, or an HTTP-date to wait until. */
+  private parseRetryAfter(header: string | undefined): number | undefined {
+    if (!header) return undefined;
+
+    const seconds = Number(header);
+    if (!Number.isNaN(seconds)) return Math.max(0, seconds * 1000);
+
+    const targetMs = Date.parse(header);
+    if (!Number.isNaN(targetMs)) return Math.max(0, targetMs - Date.now());
+
+    return undefined;
   }
 }

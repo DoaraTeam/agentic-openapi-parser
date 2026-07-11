@@ -1,5 +1,6 @@
+import { randomUUID } from 'crypto';
 import axios, { AxiosError, AxiosRequestConfig, AxiosResponse } from 'axios';
-import { ExecuteToolOptions, ILogger, ResponseProcessor, RetryOptions } from '@/types';
+import { ExecuteToolOptions, ILogger, ObservabilityHooks, ResponseProcessor, RetryOptions, ToolCallRequest, ToolCallOutcome } from '@/types';
 import type { IDynamicToolExecutorService, IOpenApiSecurityInjector } from '@/services';
 import { ConcurrencyLimiter, DEFAULT_LOGGER, findOperationByToolName, stripNamespace } from '@/utils';
 import { ResponseProcessingError, ToolExecutionError, ToolNotFoundError } from '@/errors';
@@ -68,13 +69,33 @@ export class DynamicToolExecutorService implements IDynamicToolExecutorService {
         timeout: options?.timeout || 15000,
     };
 
+    const requestId = randomUUID();
+    const hooks = options?.hooks;
+    const startedAt = Date.now();
+    this.invokeHook(hooks?.onRequestStart, { requestId, toolName });
+
     let response: AxiosResponse;
     try {
-      const send = () => this.sendWithRetry(reqConfig, toolName, options?.retry);
+      const send = () => this.sendWithRetry(reqConfig, toolName, options?.retry, requestId, hooks);
       response = this.concurrencyLimiter ? await this.concurrencyLimiter.run(send) : await send();
     } catch (error: unknown) {
+      this.invokeHook(hooks?.onRequestEnd, {
+        requestId,
+        toolName,
+        durationMs: Date.now() - startedAt,
+        success: false,
+        statusCode: (error as AxiosError).response?.status,
+      });
       this.handleExecutionError(error);
     }
+
+    this.invokeHook(hooks?.onRequestEnd, {
+      requestId,
+      toolName,
+      durationMs: Date.now() - startedAt,
+      success: true,
+      statusCode: response.status,
+    });
 
     // Deliberately outside the try/catch above: a ResponseProcessor failure (e.g. a malformed
     // JMESPath expression) is a caller configuration bug, not a failed HTTP request, and must not
@@ -82,7 +103,28 @@ export class DynamicToolExecutorService implements IDynamicToolExecutorService {
     return this.applyResponseProcessors(response.data, options?.responseProcessors);
   }
 
-  private async sendWithRetry(reqConfig: AxiosRequestConfig, toolName: string, retryOptions?: RetryOptions): Promise<AxiosResponse> {
+  async executeMany(
+    spec: Record<string, unknown>,
+    calls: ToolCallRequest[],
+    options?: ExecuteToolOptions
+  ): Promise<ToolCallOutcome[]> {
+    const settled = await Promise.allSettled(calls.map((call) => this.execute(spec, call.toolName, call.args, options)));
+
+    return settled.map((outcome, index) => {
+      const toolName = calls[index]!.toolName;
+      return outcome.status === 'fulfilled'
+        ? { toolName, status: 'fulfilled', value: outcome.value }
+        : { toolName, status: 'rejected', reason: outcome.reason };
+    });
+  }
+
+  private async sendWithRetry(
+    reqConfig: AxiosRequestConfig,
+    toolName: string,
+    retryOptions: RetryOptions | undefined,
+    requestId: string,
+    hooks: ObservabilityHooks | undefined
+  ): Promise<AxiosResponse> {
     const policy = new RetryPolicy(retryOptions);
     let attempt = 0;
 
@@ -90,11 +132,14 @@ export class DynamicToolExecutorService implements IDynamicToolExecutorService {
       try {
         return await axios(reqConfig);
       } catch (error: unknown) {
-        const statusCode = (error as AxiosError).response?.status;
+        const axiosError = error as AxiosError;
+        const statusCode = axiosError.response?.status;
         if (!policy.shouldRetry(attempt, statusCode)) throw error;
 
-        const delayMs = policy.delayFor(attempt);
+        const retryAfterHeader = axiosError.response?.headers?.['retry-after'];
+        const delayMs = policy.delayFor(attempt, retryAfterHeader !== undefined ? String(retryAfterHeader) : undefined);
         this.logger.warn(`Tool "${toolName}" attempt ${attempt + 1} failed (status ${statusCode ?? 'network error'}), retrying in ${Math.round(delayMs)}ms`);
+        this.invokeHook(hooks?.onRetry, { requestId, toolName, attempt: attempt + 1, statusCode, delayMs });
         await this.sleep(delayMs);
         attempt++;
       }
@@ -103,6 +148,18 @@ export class DynamicToolExecutorService implements IDynamicToolExecutorService {
 
   private sleep(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  /** Runs a caller-supplied observability hook without letting it fail or block the tool call — a
+   *  throwing hook is logged and ignored, since it's a side channel, not part of the request. */
+  private invokeHook<TInfo>(hook: ((info: TInfo) => void) | undefined, info: TInfo): void {
+    if (!hook) return;
+    try {
+      hook(info);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.error(`Observability hook threw and was ignored: ${message}`);
+    }
   }
 
   private applyResponseProcessors(data: unknown, processors?: ResponseProcessor[]): unknown {

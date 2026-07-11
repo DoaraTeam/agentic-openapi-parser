@@ -17,7 +17,7 @@ describe('VercelAiAdapter', () => {
   ];
 
   it('produces a tools map keyed by sanitized tool name', () => {
-    const executor = { execute: jest.fn().mockResolvedValue({ id: 1 }) };
+    const executor = { execute: jest.fn().mockResolvedValue({ id: 1 }), executeMany: jest.fn() };
     const adapter = new VercelAiAdapter(executor, {}, toolsDef);
 
     const tools = adapter.getTools();
@@ -25,7 +25,7 @@ describe('VercelAiAdapter', () => {
   });
 
   it('executes via the injected executor and returns the raw result', async () => {
-    const executor = { execute: jest.fn().mockResolvedValue({ id: 1, name: 'Alice' }) };
+    const executor = { execute: jest.fn().mockResolvedValue({ id: 1, name: 'Alice' }), executeMany: jest.fn() };
     const adapter = new VercelAiAdapter(executor, { paths: {} }, toolsDef, { accessToken: 'tok' });
 
     const tools = adapter.getTools() as Record<string, { execute: (args: unknown) => Promise<unknown> }>;
