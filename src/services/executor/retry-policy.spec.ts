@@ -38,13 +38,53 @@ describe('RetryPolicy', () => {
   });
 
   describe('delayFor', () => {
-    it('produces a delay within [0, retryDelayMs * 2^attempt]', () => {
+    it('produces a delay within [0, retryDelayMs * 2^attempt] with no Retry-After header', () => {
       const policy = new RetryPolicy({ retryDelayMs: 100 });
       const spy = jest.spyOn(Math, 'random').mockReturnValue(0.5);
 
       expect(policy.delayFor(0)).toBe(50);
       expect(policy.delayFor(1)).toBe(100);
       expect(policy.delayFor(2)).toBe(200);
+
+      spy.mockRestore();
+    });
+
+    it('honors a Retry-After header given as a number of seconds, overriding backoff math', () => {
+      const policy = new RetryPolicy({ retryDelayMs: 100 });
+      expect(policy.delayFor(5, '2')).toBe(2000);
+    });
+
+    it('honors a Retry-After header given as an HTTP-date', () => {
+      const policy = new RetryPolicy();
+      const target = new Date(Date.now() + 5000);
+
+      const delay = policy.delayFor(0, target.toUTCString());
+
+      expect(delay).toBeGreaterThan(4000);
+      expect(delay).toBeLessThanOrEqual(5000);
+    });
+
+    it('clamps a past Retry-After date to 0 instead of a negative delay', () => {
+      const policy = new RetryPolicy();
+      const pastDate = new Date(Date.now() - 60_000).toUTCString();
+
+      expect(policy.delayFor(0, pastDate)).toBe(0);
+    });
+
+    it('falls back to backoff math when the header is unparseable', () => {
+      const policy = new RetryPolicy({ retryDelayMs: 100 });
+      const spy = jest.spyOn(Math, 'random').mockReturnValue(0.5);
+
+      expect(policy.delayFor(0, 'not-a-valid-value')).toBe(50);
+
+      spy.mockRestore();
+    });
+
+    it('falls back to backoff math when no header is given', () => {
+      const policy = new RetryPolicy({ retryDelayMs: 100 });
+      const spy = jest.spyOn(Math, 'random').mockReturnValue(0.5);
+
+      expect(policy.delayFor(0, undefined)).toBe(50);
 
       spy.mockRestore();
     });

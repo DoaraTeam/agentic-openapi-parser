@@ -132,10 +132,12 @@ export class DynamicToolExecutorService implements IDynamicToolExecutorService {
       try {
         return await axios(reqConfig);
       } catch (error: unknown) {
-        const statusCode = (error as AxiosError).response?.status;
+        const axiosError = error as AxiosError;
+        const statusCode = axiosError.response?.status;
         if (!policy.shouldRetry(attempt, statusCode)) throw error;
 
-        const delayMs = policy.delayFor(attempt);
+        const retryAfterHeader = axiosError.response?.headers?.['retry-after'];
+        const delayMs = policy.delayFor(attempt, retryAfterHeader !== undefined ? String(retryAfterHeader) : undefined);
         this.logger.warn(`Tool "${toolName}" attempt ${attempt + 1} failed (status ${statusCode ?? 'network error'}), retrying in ${Math.round(delayMs)}ms`);
         this.invokeHook(hooks?.onRetry, { requestId, toolName, attempt: attempt + 1, statusCode, delayMs });
         await this.sleep(delayMs);

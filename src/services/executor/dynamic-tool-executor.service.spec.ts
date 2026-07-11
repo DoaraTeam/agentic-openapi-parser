@@ -308,6 +308,20 @@ describe('DynamicToolExecutorService', () => {
       await expect(service.execute(mockSpec, 'getUsers', {}, { retry: { maxRetries: 3, retryDelayMs: 1 } })).rejects.toThrow(/Status 400/);
       expect(axios).toHaveBeenCalledTimes(1);
     });
+
+    it('waits for the Retry-After header instead of exponential backoff, and reports it via onRetry', async () => {
+      const error = { response: { status: 429, data: 'Too Many Requests', headers: { 'retry-after': '0.01' } }, config: {} };
+      (axios as unknown as jest.Mock).mockRejectedValueOnce(error).mockResolvedValueOnce({ data: { ok: true } });
+      const onRetry = jest.fn();
+
+      const result = await service.execute(mockSpec, 'getUsers', {}, {
+        retry: { maxRetries: 1, retryDelayMs: 10_000 }, // a huge backoff delay the header must override
+        hooks: { onRetry },
+      });
+
+      expect(result).toEqual({ ok: true });
+      expect(onRetry).toHaveBeenCalledWith(expect.objectContaining({ delayMs: 10 }));
+    });
   });
 
   describe('observability hooks', () => {

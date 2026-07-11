@@ -361,7 +361,10 @@ Third-party APIs are flaky. Three independent knobs handle this without any extr
   ```
 
   Only retries idempotent-looking failures (timeouts, 429/5xx, connection resets) — a 4xx client
-  error fails immediately, no retry.
+  error fails immediately, no retry. When a retryable failure's response carries a `Retry-After`
+  header (seconds or an HTTP-date — GitHub and Stripe both send this on `429`s), that value is used
+  as-is instead of the exponential backoff above, since the server is telling you exactly how long
+  to wait.
 
 - **Concurrency limit** — a policy for the *executor instance* rather than a single call, since it
   protects one provider's API from a burst of parallel tool calls (e.g. an LLM turn requesting 20
