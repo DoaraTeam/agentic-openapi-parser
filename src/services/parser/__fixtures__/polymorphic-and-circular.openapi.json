@@ -1,0 +1,87 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Fixture: polymorphic (oneOf/discriminator) + circular ($ref) schemas",
+    "version": "1.0.0",
+    "description": "Hand-written (not fetched from a public API) because real public specs with genuine circular $ref are hard to find pre-trimmed to a small size. Modeled on real, common API patterns: threaded comments (self-referential replies) and a discriminated pet-adoption payload, the same shape GitHub/Stripe-style APIs actually use."
+  },
+  "paths": {
+    "/comments": {
+      "post": {
+        "operationId": "createComment",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/Comment" }
+            }
+          }
+        },
+        "responses": {
+          "201": { "description": "Created" }
+        }
+      }
+    },
+    "/pets/adopt": {
+      "post": {
+        "operationId": "adoptPet",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/Pet" }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "OK" }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Comment": {
+        "type": "object",
+        "required": ["id", "text"],
+        "properties": {
+          "id": { "type": "string" },
+          "text": { "type": "string" },
+          "replies": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/Comment" }
+          }
+        }
+      },
+      "Pet": {
+        "oneOf": [
+          { "$ref": "#/components/schemas/Dog" },
+          { "$ref": "#/components/schemas/Cat" }
+        ],
+        "discriminator": {
+          "propertyName": "petType",
+          "mapping": {
+            "dog": "#/components/schemas/Dog",
+            "cat": "#/components/schemas/Cat"
+          }
+        }
+      },
+      "Dog": {
+        "type": "object",
+        "required": ["petType", "breed"],
+        "properties": {
+          "petType": { "type": "string", "enum": ["dog"] },
+          "breed": { "type": "string" }
+        }
+      },
+      "Cat": {
+        "type": "object",
+        "required": ["petType", "livesLeft"],
+        "properties": {
+          "petType": { "type": "string", "enum": ["cat"] },
+          "livesLeft": { "type": "integer" }
+        }
+      }
+    }
+  }
+}

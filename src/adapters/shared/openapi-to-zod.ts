@@ -14,6 +14,18 @@ function buildStringZodType(format?: string): z.ZodString {
   }
 }
 
+function buildUnionZodType(variants: Record<string, unknown>[], seen: WeakSet<object>): z.ZodTypeAny {
+  const zodVariants = variants.map((v) => jsonSchemaToZod(v, seen));
+  return zodVariants.length === 1 ? zodVariants[0]! : z.union(zodVariants as unknown as [z.ZodTypeAny, z.ZodTypeAny, ...z.ZodTypeAny[]]);
+}
+
+function buildIntersectionZodType(variants: Record<string, unknown>[], seen: WeakSet<object>): z.ZodTypeAny {
+  const zodVariants = variants.map((v) => jsonSchemaToZod(v, seen));
+  const allObjects = zodVariants.every((v): v is z.ZodObject<z.ZodRawShape> => v instanceof z.ZodObject);
+  if (!allObjects) return zodVariants[0] ?? z.unknown();
+  return zodVariants.reduce((merged, part) => merged.merge(part));
+}
+
 function buildBaseZodType(schema: Record<string, unknown>, seen: WeakSet<object>): z.ZodTypeAny {
   const enumValues = schema.enum as unknown[] | undefined;
   if (Array.isArray(enumValues) && enumValues.length > 0) {
@@ -23,6 +35,20 @@ function buildBaseZodType(schema: Record<string, unknown>, seen: WeakSet<object>
     const literals = enumValues.map((v) => z.literal(v as string | number | boolean));
     return literals.length === 1 ? literals[0]! : z.union(literals as unknown as [z.ZodTypeAny, z.ZodTypeAny, ...z.ZodTypeAny[]]);
   }
+
+  // oneOf/anyOf model "exactly/at-least one of these shapes" — a union is the correct Zod
+  // equivalent for both (Zod has no laxer "anyOf" primitive; union already accepts whichever
+  // variant matches, which is the practical behavior anyOf callers need).
+  const oneOf = schema.oneOf as Record<string, unknown>[] | undefined;
+  if (Array.isArray(oneOf) && oneOf.length > 0) return buildUnionZodType(oneOf, seen);
+
+  const anyOf = schema.anyOf as Record<string, unknown>[] | undefined;
+  if (Array.isArray(anyOf) && anyOf.length > 0) return buildUnionZodType(anyOf, seen);
+
+  // allOf composes multiple object schemas into one — merge their shapes. A non-object member
+  // (rare in practice) falls back to just the first variant rather than guessing a merge.
+  const allOf = schema.allOf as Record<string, unknown>[] | undefined;
+  if (Array.isArray(allOf) && allOf.length > 0) return buildIntersectionZodType(allOf, seen);
 
   switch (schema.type) {
     case 'object': {

@@ -34,14 +34,18 @@ describe('sanitizeJsonSchema', () => {
     expect(result).toEqual({ type: 'string' });
   });
 
-  it('recurses into properties and items but not anyOf/oneOf/allOf', () => {
+  it('recurses into properties, items, and oneOf/anyOf/allOf branches alike', () => {
     const result = sanitizeJsonSchema({
       type: 'object',
       properties: { name: { type: 'string', default: 'x' } },
       anyOf: [{ default: 'untouched' }],
+      oneOf: [{ type: 'string', example: 'foo' }],
+      allOf: [{ type: 'object', pattern: '^x$' }],
     }) as Record<string, unknown>;
     expect((result.properties as Record<string, unknown>).name).toEqual({ type: 'string' });
-    expect((result.anyOf as Record<string, unknown>[])[0]).toEqual({ default: 'untouched' });
+    expect((result.anyOf as Record<string, unknown>[])[0]).toEqual({});
+    expect((result.oneOf as Record<string, unknown>[])[0]).toEqual({ type: 'string' });
+    expect((result.allOf as Record<string, unknown>[])[0]).toEqual({ type: 'object' });
   });
 });
 
