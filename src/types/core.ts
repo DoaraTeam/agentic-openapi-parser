@@ -19,6 +19,11 @@ export interface DynamicToolDefinition {
   tags?: string[];
 }
 
+export interface ParsedOpenApiSpec {
+  document: Record<string, unknown>;
+  tools: DynamicToolDefinition[];
+}
+
 export interface ResponseProcessor {
   process(data: unknown): unknown;
 }

@@ -1,6 +1,6 @@
 import { OpenApiParserService, OpenApiSecurityInjector, DynamicToolExecutorService } from '@/services';
 import type { IOpenApiParserService, IOpenApiSecurityInjector, IDynamicToolExecutorService } from '@/services';
-import { DynamicToolDefinition, ExecuteToolOptions, ILogger } from '@/types';
+import { ExecuteToolOptions, ILogger, ParsedOpenApiSpec } from '@/types';
 import { DEFAULT_LOGGER } from '@/utils';
 import type { ToolFilterOptions } from '@/utils';
 
@@ -30,7 +30,7 @@ export class DynamicOpenApiAgent {
     return this.executor;
   }
 
-  async parseAndFlatten(apiSpecUrl: string, providerId?: string, filter?: ToolFilterOptions, namespace?: string): Promise<{ document: Record<string, unknown>; tools: DynamicToolDefinition[] }> {
+  async parseAndFlatten(apiSpecUrl: string, providerId?: string, filter?: ToolFilterOptions, namespace?: string): Promise<ParsedOpenApiSpec> {
     return this.parser.parseAndFlatten(apiSpecUrl, providerId, filter, namespace);
   }
 

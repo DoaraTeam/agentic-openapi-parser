@@ -1,6 +1,6 @@
 import axios from 'axios';
 import SwaggerParser from '@apidevtools/swagger-parser';
-import { DynamicToolDefinition, ILogger } from '@/types';
+import { DynamicToolDefinition, ILogger, ParsedOpenApiSpec } from '@/types';
 import type { IOpenApiParserService } from '@/services';
 import type { ToolFilterOptions } from '@/utils';
 import { applyNamespace, DEFAULT_LOGGER, deriveToolName, filterTools, iterateOperations } from '@/utils';
@@ -31,7 +31,7 @@ export class OpenApiParserService implements IOpenApiParserService {
     providerId?: string,
     filter?: ToolFilterOptions,
     namespace?: string
-  ): Promise<{ document: Record<string, unknown>, tools: DynamicToolDefinition[] }> {
+  ): Promise<ParsedOpenApiSpec> {
     this.logger.log(`Parsing OpenAPI spec from: ${apiSpecUrl}`);
     try {
       const document = await this.loadDocument(apiSpecUrl);
