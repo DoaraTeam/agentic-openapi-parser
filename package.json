@@ -5,12 +5,16 @@
   "main": "dist/index.js",
   "module": "dist/index.mjs",
   "types": "dist/index.d.ts",
+  "bin": {
+    "agentic-openapi-parser": "./dist/cli/index.js"
+  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.mjs",
       "require": "./dist/index.js"
     },
+    "./cli": null,
     "./*": {
       "types": "./dist/*/index.d.ts",
       "import": "./dist/*/index.mjs",
