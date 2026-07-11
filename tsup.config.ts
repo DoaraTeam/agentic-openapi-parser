@@ -12,7 +12,8 @@ export default defineConfig({
     'src/adapters/mcp/index.ts',
     'src/adapters/openai/index.ts',
     'src/adapters/anthropic/index.ts',
-    'src/adapters/shared/index.ts'
+    'src/adapters/shared/index.ts',
+    'src/cli/index.ts'
   ],
   format: ['cjs', 'esm'],
   dts: true,

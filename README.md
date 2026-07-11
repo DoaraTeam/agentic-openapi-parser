@@ -40,6 +40,28 @@ npm install zod @langchain/core ai @modelcontextprotocol/sdk
 
 ---
 
+## 🔍 CLI — inspect a spec without writing code
+
+```bash
+npx agentic-openapi-parser inspect https://api.example.com/openapi.json
+```
+
+Prints every tool the spec would flatten into (method, derived name, path), with a warning if the
+count is high enough to hurt LLM tool-selection accuracy. Useful for a quick sanity check before
+wiring a spec into your code, or for deciding what to pass to `ToolFilterOptions`.
+
+```bash
+# Filter by OpenAPI tag, same as ToolFilterOptions.includeTags/excludeTags
+npx agentic-openapi-parser inspect ./openapi.json --tag payments --exclude-tag internal
+
+# Machine-readable output for piping into jq or other tooling
+npx agentic-openapi-parser inspect ./openapi.json --json
+```
+
+`--tag`/`--exclude-tag` are repeatable. Run `npx agentic-openapi-parser --help` for the full list.
+
+---
+
 ## 🚀 Usage Guide
 
 This library uses modern sub-path exports to keep your bundle clean.
