@@ -1,0 +1,23 @@
+{
+  "$schema": "https://typedoc.org/schema.json",
+  "name": "agentic-openapi-parser",
+  "entryPoints": [
+    "src/index.ts",
+    "src/services/index.ts",
+    "src/types/index.ts",
+    "src/utils/index.ts",
+    "src/testing/index.ts",
+    "src/adapters/shared/index.ts",
+    "src/adapters/nestjs/index.ts",
+    "src/adapters/langchain/index.ts",
+    "src/adapters/vercel-ai/index.ts",
+    "src/adapters/mcp/index.ts",
+    "src/adapters/openai/index.ts",
+    "src/adapters/anthropic/index.ts"
+  ],
+  "out": "typedoc-output",
+  "readme": "README.md",
+  "excludePrivate": true,
+  "excludeInternal": true,
+  "excludeExternals": true
+}

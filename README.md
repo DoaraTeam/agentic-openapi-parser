@@ -3,10 +3,15 @@
 [![npm version](https://badge.fury.io/js/agentic-openapi.svg)](https://badge.fury.io/js/agentic-openapi)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![TypeScript](https://img.shields.io/badge/TypeScript-Ready-blue.svg)](https://www.typescriptlang.org/)
+[![API Docs](https://img.shields.io/badge/API%20Docs-typedoc-informational.svg)](https://doarateam.github.io/agentic-openapi-parser/)
 
 A highly modular, universal library that dynamically parses OpenAPI/Swagger specifications and turns them into highly structured, AI-ready functions ("Tools"). It securely injects authentication (Bearer, API Keys, Basic Auth, OAuth2) on the fly and provides ready-to-use adapters for the **Vercel AI SDK** and **Langchain**.
 
 This library completely eliminates the need to generate static client code. Your AI agent can directly interact with *any* API given its Swagger/OpenAPI URL!
+
+This README covers usage by example. For the full type reference (every field of
+`ExecuteToolOptions`, every exported class/interface across all subpaths), see the generated
+[API docs](https://doarateam.github.io/agentic-openapi-parser/).
 
 ---
 
