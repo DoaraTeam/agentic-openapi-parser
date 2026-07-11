@@ -513,6 +513,40 @@ cosine similarity without re-embedding anything. By default each tool is embedde
 
 ---
 
+## 🧪 Testing Helpers
+
+Code that wires an adapter (Langchain, Vercel AI, MCP, OpenAI, Anthropic) to this library still
+needs a `IDynamicToolExecutorService` to construct it. `createMockExecutor` fakes one from a plain
+map of tool name → response, so a consumer's own tests don't need a real spec, a real HTTP call, or
+mocking this library's internals directly:
+
+```ts
+import { createMockExecutor } from 'agentic-openapi-parser/testing';
+import { LangchainToolAdapter } from 'agentic-openapi-parser/adapters/langchain';
+
+const executor = createMockExecutor({
+  getPet: { id: 1, name: 'Rex' },
+  createPet: (args: Record<string, unknown>) => ({ id: 99, ...args }),
+  deletePet: new Error('upstream 500'), // simulates a failed tool call
+});
+
+const adapter = new LangchainToolAdapter(executor, spec, tools);
+// ...invoke a tool through the adapter, then assert on executor.calls:
+expect(executor.calls).toEqual([{ toolName: 'getPet', args: { petId: 1 }, options: undefined }]);
+```
+
+A tool name missing from the response map throws the same `ToolNotFoundError` the real executor
+would, so error-path tests stay realistic. A response can be a static value, a `(args, options) =>
+value` function for dynamic responses, or an `Error` instance to simulate a failed call.
+
+If instead you want to test this library's *own* HTTP behavior (retries, timeouts, real request
+shape) rather than mock it away, intercept at the HTTP layer with
+[`nock`](https://github.com/nock/nock), [`msw`](https://mswjs.io/), or
+[`axios-mock-adapter`](https://github.com/ctimmerm/axios-mock-adapter) instead — `createMockExecutor`
+is deliberately for the opposite case, where the executor itself is a dependency you want to stub out.
+
+---
+
 ## 🚨 Error Handling
 
 Every error this library throws deliberately extends `AgenticOpenApiError` (itself a real
