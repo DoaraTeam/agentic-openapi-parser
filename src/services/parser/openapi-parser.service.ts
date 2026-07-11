@@ -4,6 +4,7 @@ import { DynamicToolDefinition, ILogger, ParsedOpenApiSpec } from '@/types';
 import type { IOpenApiParserService } from '@/services';
 import type { ToolFilterOptions } from '@/utils';
 import { applyNamespace, DEFAULT_LOGGER, deriveToolName, filterTools, iterateOperations } from '@/utils';
+import { SpecParseError } from '@/errors';
 import { SpecCache } from './spec-cache';
 
 export interface OpenApiParserServiceOptions {
@@ -44,7 +45,7 @@ export class OpenApiParserService implements IOpenApiParserService {
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       this.logger.error(`Failed to parse OpenAPI spec: ${errorMessage}`);
-      throw new Error(`Failed to parse OpenAPI spec: ${errorMessage}`);
+      throw new SpecParseError(apiSpecUrl, `Failed to parse OpenAPI spec: ${errorMessage}`, { cause: error });
     }
   }
 

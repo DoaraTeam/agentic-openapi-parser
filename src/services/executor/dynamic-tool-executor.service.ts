@@ -2,6 +2,7 @@ import axios, { AxiosError, AxiosRequestConfig, AxiosResponse } from 'axios';
 import { ExecuteToolOptions, ILogger, ResponseProcessor, RetryOptions } from '@/types';
 import type { IDynamicToolExecutorService, IOpenApiSecurityInjector } from '@/services';
 import { ConcurrencyLimiter, DEFAULT_LOGGER, findOperationByToolName, stripNamespace } from '@/utils';
+import { ResponseProcessingError, ToolExecutionError, ToolNotFoundError } from '@/errors';
 import { RetryPolicy } from './retry-policy';
 
 export interface DynamicToolExecutorServiceOptions {
@@ -34,7 +35,7 @@ export class DynamicToolExecutorService implements IDynamicToolExecutorService {
     const operationInfo = findOperationByToolName(spec, unnamespacedName);
 
     if (!operationInfo) {
-      throw new Error(`Tool "${toolName}" not found in the provided OpenAPI spec.`);
+      throw new ToolNotFoundError(toolName);
     }
 
     const { path, method, operation } = operationInfo;
@@ -106,7 +107,14 @@ export class DynamicToolExecutorService implements IDynamicToolExecutorService {
 
   private applyResponseProcessors(data: unknown, processors?: ResponseProcessor[]): unknown {
     if (!processors || processors.length === 0) return data;
-    return processors.reduce((acc, processor) => processor.process(acc), data);
+    return processors.reduce((acc, processor) => {
+      try {
+        return processor.process(acc);
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : String(error);
+        throw new ResponseProcessingError(processor.constructor.name, message, { cause: error });
+      }
+    }, data);
   }
 
   private getBaseUrl(spec: Record<string, unknown>): string {
@@ -185,8 +193,8 @@ export class DynamicToolExecutorService implements IDynamicToolExecutorService {
     const errorText = `API Request Failed: Status ${status}: ${
       typeof data === 'object' ? JSON.stringify(data) : data
     }\nRequest Sent: ${JSON.stringify(debugInfo)}`;
-    
+
     this.logger.error(errorText);
-    throw new Error(errorText);
+    throw new ToolExecutionError(errorText, status, data, { cause: error });
   }
 }

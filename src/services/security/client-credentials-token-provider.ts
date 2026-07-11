@@ -1,6 +1,7 @@
 import axios from 'axios';
 import { AccessTokenProvider, ILogger } from '@/types';
 import { DEFAULT_LOGGER } from '@/utils';
+import { AccessTokenError } from '@/errors';
 
 const DEFAULT_REFRESH_THRESHOLD_MS = 5 * 60 * 1000;
 const DEFAULT_EXPIRES_IN_SECS = 3600;
@@ -63,7 +64,7 @@ export class ClientCredentialsTokenProvider implements AccessTokenProvider {
       }
 
       this.logger.error(`Failed to obtain client_credentials access token: ${message}`);
-      throw new Error(`Failed to obtain client_credentials access token: ${message}`);
+      throw new AccessTokenError(`Failed to obtain client_credentials access token: ${message}`, { cause: error });
     }
   }
 

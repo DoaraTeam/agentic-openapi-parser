@@ -1,5 +1,6 @@
 import { OpenAiToolAdapter } from './openai.adapter';
 import { DynamicToolDefinition } from '@/types';
+import { ToolNotFoundError } from '@/errors';
 
 describe('OpenAiToolAdapter', () => {
   const toolsDef: DynamicToolDefinition[] = [
@@ -51,11 +52,12 @@ describe('OpenAiToolAdapter', () => {
     expect(result).toEqual({ id: 1, name: 'Alice' });
   });
 
-  it('executeToolCall throws for an unknown tool name', async () => {
+  it('executeToolCall throws a ToolNotFoundError for an unknown tool name', async () => {
     const executor = { execute: jest.fn() };
     const adapter = new OpenAiToolAdapter(executor, {}, toolsDef);
 
-    await expect(adapter.executeToolCall('doesNotExist', {})).rejects.toThrow(/Unknown tool "doesNotExist"/);
+    await expect(adapter.executeToolCall('doesNotExist', {})).rejects.toThrow(ToolNotFoundError);
+    await expect(adapter.executeToolCall('doesNotExist', {})).rejects.toThrow(/doesNotExist/);
     expect(executor.execute).not.toHaveBeenCalled();
   });
 });

@@ -1,6 +1,7 @@
 import { DynamicToolExecutorService } from './dynamic-tool-executor.service';
 import type { IOpenApiSecurityInjector } from '@/services';
 import axios from 'axios';
+import { ResponseProcessingError, ToolExecutionError, ToolNotFoundError } from '@/errors';
 
 jest.mock('axios');
 
@@ -47,7 +48,7 @@ describe('DynamicToolExecutorService', () => {
     }));
   });
 
-  it('should handle execution errors and throw a masked error', async () => {
+  it('should handle execution errors and throw a masked ToolExecutionError', async () => {
     const mockSpec = {
       servers: [{ url: 'https://api.example.com' }],
       paths: {
@@ -65,9 +66,20 @@ describe('DynamicToolExecutorService', () => {
     (axios as unknown as jest.Mock).mockRejectedValue(axiosError);
 
     await expect(service.execute(mockSpec, 'getUsers', {})).rejects.toThrow(/Status 401: Unauthorized/);
-    
+
     // The exact error should contain masked token
     await expect(service.execute(mockSpec, 'getUsers', {})).rejects.toThrow(/Bearer \*\*\*/);
+    await expect(service.execute(mockSpec, 'getUsers', {})).rejects.toThrow(ToolExecutionError);
+
+    try {
+      await service.execute(mockSpec, 'getUsers', {});
+      fail('expected execute to reject');
+    } catch (error) {
+      expect(error).toBeInstanceOf(ToolExecutionError);
+      expect((error as ToolExecutionError).statusCode).toBe(401);
+      expect((error as ToolExecutionError).responseData).toBe('Unauthorized');
+      expect((error as ToolExecutionError).cause).toBe(axiosError);
+    }
   });
 
   it('runs the response through responseProcessors, in order, before returning', async () => {
@@ -99,22 +111,34 @@ describe('DynamicToolExecutorService', () => {
     expect(result).toEqual({ untouched: true });
   });
 
-  it('propagates a responseProcessor failure as its own error, not as a masked "API Request Failed"', async () => {
+  it('propagates a responseProcessor failure as its own ResponseProcessingError, not as a masked "API Request Failed"', async () => {
     const mockSpec = {
       servers: [{ url: 'https://api.example.com' }],
       paths: { '/users': { get: { operationId: 'getUsers' } } },
     };
     (axios as unknown as jest.Mock).mockResolvedValue({ data: { ok: true } });
 
-    const throwingProcessor = {
-      process: jest.fn(() => {
+    class FakeJmesPathProcessor {
+      process() {
         throw new Error('Invalid JMESPath expression');
-      }),
-    };
+      }
+    }
+    const throwingProcessor = new FakeJmesPathProcessor();
 
     await expect(
       service.execute(mockSpec, 'getUsers', {}, { responseProcessors: [throwingProcessor] })
     ).rejects.toThrow('Invalid JMESPath expression');
+    await expect(
+      service.execute(mockSpec, 'getUsers', {}, { responseProcessors: [throwingProcessor] })
+    ).rejects.toThrow(ResponseProcessingError);
+
+    try {
+      await service.execute(mockSpec, 'getUsers', {}, { responseProcessors: [throwingProcessor] });
+      fail('expected execute to reject');
+    } catch (error) {
+      expect(error).toBeInstanceOf(ResponseProcessingError);
+      expect((error as ResponseProcessingError).processorName).toBe('FakeJmesPathProcessor');
+    }
   });
 
   it('refreshes the token via tokenRefresher before injecting security, and uses the new token', async () => {
@@ -304,6 +328,15 @@ describe('DynamicToolExecutorService', () => {
       (axios as unknown as jest.Mock).mockResolvedValue({ data: { ok: true } });
 
       await expect(service.execute(mockSpec, 'github__getUsers', {})).rejects.toThrow(/not found/);
+      await expect(service.execute(mockSpec, 'github__getUsers', {})).rejects.toThrow(ToolNotFoundError);
+
+      try {
+        await service.execute(mockSpec, 'github__getUsers', {});
+        fail('expected execute to reject');
+      } catch (error) {
+        expect(error).toBeInstanceOf(ToolNotFoundError);
+        expect((error as ToolNotFoundError).toolName).toBe('github__getUsers');
+      }
     });
   });
 

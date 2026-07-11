@@ -1,6 +1,7 @@
 import { OpenApiParserService } from './openapi-parser.service';
 import SwaggerParser from '@apidevtools/swagger-parser';
 import axios from 'axios';
+import { SpecParseError } from '@/errors';
 
 jest.mock('@apidevtools/swagger-parser');
 jest.mock('axios');
@@ -50,10 +51,21 @@ describe('OpenApiParserService', () => {
     expect(result.tools?.[1]?.method).toBe('post');
   });
 
-  it('should throw an error if SwaggerParser fails', async () => {
-    (SwaggerParser.dereference as jest.Mock).mockRejectedValue(new Error('Network Error'));
+  it('should throw a SpecParseError if SwaggerParser fails', async () => {
+    const networkError = new Error('Network Error');
+    (SwaggerParser.dereference as jest.Mock).mockRejectedValue(networkError);
 
     await expect(service.parseAndFlatten('http://fake-url.com')).rejects.toThrow('Failed to parse OpenAPI spec: Network Error');
+    await expect(service.parseAndFlatten('http://fake-url.com')).rejects.toThrow(SpecParseError);
+
+    try {
+      await service.parseAndFlatten('http://fake-url.com');
+      fail('expected parseAndFlatten to reject');
+    } catch (error) {
+      expect(error).toBeInstanceOf(SpecParseError);
+      expect((error as SpecParseError).apiSpecUrl).toBe('http://fake-url.com');
+      expect((error as SpecParseError).cause).toBe(networkError);
+    }
   });
 
   it('should extract requestBody schema and tags from an OpenAPI 3 operation', async () => {

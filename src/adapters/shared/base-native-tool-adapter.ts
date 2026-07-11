@@ -1,5 +1,6 @@
 import { DynamicToolDefinition, ExecuteToolOptions } from '@/types';
 import { IDynamicToolExecutorService } from '@/services';
+import { ToolNotFoundError } from '@/errors';
 import { safeToolName } from './tool-name';
 
 /**
@@ -30,7 +31,7 @@ export abstract class BaseNativeToolAdapter<TTool> {
   async executeToolCall(name: string, args: Record<string, unknown>): Promise<unknown> {
     const toolDef = this.toolsByName.get(name);
     if (!toolDef) {
-      throw new Error(`Unknown tool "${name}"`);
+      throw new ToolNotFoundError(name);
     }
     return this.executor.execute(this.spec, toolDef.name, args, this.options);
   }

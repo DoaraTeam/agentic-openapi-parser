@@ -491,6 +491,44 @@ cosine similarity without re-embedding anything. By default each tool is embedde
 
 ---
 
+## 🚨 Error Handling
+
+Every error this library throws deliberately extends `AgenticOpenApiError` (itself a real
+`Error`), instead of a generic `new Error(message)` a consumer can only distinguish by parsing the
+message string:
+
+```ts
+import { AgenticOpenApiError, ToolNotFoundError, ToolExecutionError } from 'agentic-openapi-parser';
+
+try {
+  await agent.executeTool(spec, 'getInvoice', args);
+} catch (error) {
+  if (error instanceof ToolNotFoundError) {
+    console.error(`No such tool: ${error.toolName}`);
+  } else if (error instanceof ToolExecutionError) {
+    console.error(`API call failed with status ${error.statusCode}`, error.responseData);
+  } else if (error instanceof AgenticOpenApiError) {
+    console.error('Something else this library rejected on purpose:', error.message);
+  } else {
+    throw error; // a genuinely unexpected bug — don't swallow it
+  }
+}
+```
+
+| Class | Thrown by | Structured fields |
+|---|---|---|
+| `SpecParseError` | `parseAndFlatten()` when the spec can't be fetched/dereferenced | `apiSpecUrl` |
+| `ToolNotFoundError` | `executeTool()` / a native adapter's `executeToolCall()`, unknown tool name | `toolName` |
+| `ToolExecutionError` | `executeTool()`, the HTTP request itself failed | `statusCode`, `responseData` |
+| `ResponseProcessingError` | `executeTool()`, a `ResponseProcessor` threw | `processorName` |
+| `AccessTokenError` | `ClientCredentialsTokenProvider`, no usable token could be obtained | — |
+| `EmbeddingProviderError` | `SemanticToolIndex`, the supplied `EmbeddingProvider` misbehaved | — |
+
+Every subclass also carries the original failure via the standard [`cause`](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Error/cause)
+property (`error.cause`), so nothing is lost by wrapping.
+
+---
+
 ## 🔒 Security & Logging
 
 This library implements robust safety checks:

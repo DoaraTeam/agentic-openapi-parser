@@ -5,6 +5,7 @@ jest.mock('axios', () => ({
 
 import axios from 'axios';
 import { ClientCredentialsTokenProvider } from './client-credentials-token-provider';
+import { AccessTokenError } from '@/errors';
 
 describe('ClientCredentialsTokenProvider', () => {
   const logger = { log: jest.fn(), error: jest.fn(), warn: jest.fn(), debug: jest.fn() };
@@ -101,11 +102,12 @@ describe('ClientCredentialsTokenProvider', () => {
     await expect(provider.getAccessToken()).rejects.toThrow(/did not include an access_token/);
   });
 
-  it('throws when there is no cached token and the fetch fails', async () => {
+  it('throws an AccessTokenError when there is no cached token and the fetch fails', async () => {
     (axios.post as jest.Mock).mockRejectedValue(new Error('token endpoint down'));
     const provider = new ClientCredentialsTokenProvider(config, { logger });
 
     await expect(provider.getAccessToken()).rejects.toThrow(/token endpoint down/);
+    await expect(provider.getAccessToken()).rejects.toThrow(AccessTokenError);
     expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('token endpoint down'));
   });
 

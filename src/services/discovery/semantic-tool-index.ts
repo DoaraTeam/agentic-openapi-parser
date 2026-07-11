@@ -1,5 +1,6 @@
 import { DynamicToolDefinition } from '@/types';
 import { cosineSimilarity } from '@/utils';
+import { EmbeddingProviderError } from '@/errors';
 import { EmbeddingProvider } from './embedding-provider.interface';
 
 export interface SemanticToolIndexOptions {
@@ -50,7 +51,7 @@ export class SemanticToolIndex {
     const embeddings = await this.embeddingProvider.embed(texts);
 
     if (embeddings.length !== tools.length) {
-      throw new Error(
+      throw new EmbeddingProviderError(
         `EmbeddingProvider returned ${embeddings.length} embeddings for ${tools.length} tools — these must match 1:1.`
       );
     }
@@ -58,7 +59,7 @@ export class SemanticToolIndex {
     this.indexed = tools.map((tool, i) => {
       const embedding = embeddings[i];
       if (!embedding) {
-        throw new Error(`EmbeddingProvider returned no embedding for tool "${tool.name}" at index ${i}.`);
+        throw new EmbeddingProviderError(`EmbeddingProvider returned no embedding for tool "${tool.name}" at index ${i}.`);
       }
       return { tool, embedding };
     });
@@ -70,7 +71,7 @@ export class SemanticToolIndex {
 
     const [queryEmbedding] = await this.embeddingProvider.embed([query]);
     if (!queryEmbedding) {
-      throw new Error('EmbeddingProvider returned no embedding for the search query.');
+      throw new EmbeddingProviderError('EmbeddingProvider returned no embedding for the search query.');
     }
 
     return this.indexed

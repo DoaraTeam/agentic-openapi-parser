@@ -1,6 +1,7 @@
 import { SemanticToolIndex } from './semantic-tool-index';
 import { EmbeddingProvider } from './embedding-provider.interface';
 import { DynamicToolDefinition } from '@/types';
+import { EmbeddingProviderError } from '@/errors';
 
 function makeTool(overrides: Partial<DynamicToolDefinition>): DynamicToolDefinition {
   return {
@@ -117,13 +118,14 @@ describe('SemanticToolIndex', () => {
     expect(embeddingProvider.embed).not.toHaveBeenCalled();
   });
 
-  it('throws when the embedding provider returns a mismatched number of embeddings', async () => {
+  it('throws an EmbeddingProviderError when the embedding provider returns a mismatched number of embeddings', async () => {
     const embeddingProvider: EmbeddingProvider = {
       embed: jest.fn().mockResolvedValue([[1, 0]]), // only 1, but we index 2 tools
     };
     const index = new SemanticToolIndex(embeddingProvider);
 
     await expect(index.build([getRefund, createInvoice])).rejects.toThrow(/returned 1 embeddings for 2 tools/);
+    await expect(index.build([getRefund, createInvoice])).rejects.toThrow(EmbeddingProviderError);
   });
 
   it('re-indexing with build() replaces the previous index rather than appending to it', async () => {
