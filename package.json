@@ -28,7 +28,7 @@
     "dev": "tsup --watch",
     "lint": "eslint src",
     "typecheck": "tsc --noEmit",
-    "docs": "typedoc",
+    "docs:build": "typedoc",
     "prepare": "husky",
     "prepublishOnly": "node scripts/assert-main-branch.js"
   },
