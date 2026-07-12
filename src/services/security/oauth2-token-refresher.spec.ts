@@ -81,4 +81,36 @@ describe('Oauth2RefreshTokenRefresher', () => {
     await expect(refresher.refreshIfNeeded(futureState(1000))).resolves.toBeUndefined();
     expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('network down'));
   });
+
+  it('defaults to a form-urlencoded body when requestFormat is not given', async () => {
+    (axios.post as jest.Mock).mockResolvedValue({ data: { access_token: 'new-token', expires_in: 3600 } });
+    const refresher = new Oauth2RefreshTokenRefresher({ logger });
+
+    await refresher.refreshIfNeeded(futureState(1000));
+
+    expect(axios.post).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.anything(),
+      { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
+    );
+  });
+
+  it('sends a JSON body with the same fields when requestFormat is "json" (e.g. Atlassian)', async () => {
+    (axios.post as jest.Mock).mockResolvedValue({ data: { access_token: 'new-token', expires_in: 3600 } });
+    const refresher = new Oauth2RefreshTokenRefresher({ logger, requestFormat: 'json' });
+
+    const result = await refresher.refreshIfNeeded(futureState(1000));
+
+    expect(axios.post).toHaveBeenCalledWith(
+      'https://provider.example.com/oauth/token',
+      {
+        grant_type: 'refresh_token',
+        refresh_token: 'refresh-token',
+        client_id: 'client-id',
+        client_secret: 'client-secret',
+      },
+      { headers: { 'Content-Type': 'application/json' } }
+    );
+    expect(result?.accessToken).toBe('new-token');
+  });
 });

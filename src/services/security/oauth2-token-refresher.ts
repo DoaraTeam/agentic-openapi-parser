@@ -4,12 +4,18 @@ import { DEFAULT_LOGGER } from '@/utils';
 
 const DEFAULT_REFRESH_THRESHOLD_MS = 5 * 60 * 1000;
 
+export type OAuth2RefreshRequestFormat = 'form' | 'json';
+
 export interface Oauth2RefreshTokenRefresherOptions {
   /** How far ahead of expiry to trigger a refresh, in ms. Defaults to 5 minutes. */
   refreshThresholdMs?: number;
   logger?: ILogger;
   /** Fire-and-forget hook for persisting the refreshed token (e.g. to a DB via a queue job). */
   onRefreshed?: (newState: OAuth2TokenState) => void | Promise<void>;
+  /** Most OAuth2 token endpoints (Google, Microsoft, HubSpot, Salesforce, Spotify...) accept
+   *  application/x-www-form-urlencoded, which is the default. A few (e.g. Atlassian's
+   *  auth.atlassian.com) require a JSON body instead. */
+  requestFormat?: OAuth2RefreshRequestFormat;
 }
 
 /** OAuth2 refresh_token-grant TokenRefresher. Refresh failures are logged and swallowed — the
@@ -18,11 +24,13 @@ export class Oauth2RefreshTokenRefresher implements TokenRefresher {
   private readonly refreshThresholdMs: number;
   private readonly logger: ILogger;
   private readonly onRefreshed?: (newState: OAuth2TokenState) => void | Promise<void>;
+  private readonly requestFormat: OAuth2RefreshRequestFormat;
 
   constructor(options: Oauth2RefreshTokenRefresherOptions = {}) {
     this.refreshThresholdMs = options.refreshThresholdMs ?? DEFAULT_REFRESH_THRESHOLD_MS;
     this.logger = options.logger ?? DEFAULT_LOGGER;
     this.onRefreshed = options.onRefreshed;
+    this.requestFormat = options.requestFormat ?? 'form';
   }
 
   async refreshIfNeeded(state: OAuth2TokenState): Promise<OAuth2TokenState | undefined> {
@@ -33,6 +41,7 @@ export class Oauth2RefreshTokenRefresher implements TokenRefresher {
 
     this.logger.warn('Token is expiring soon. Auto-renewing...');
     try {
+      const contentType = this.requestFormat === 'json' ? 'application/json' : 'application/x-www-form-urlencoded';
       const response = await axios.post(
         state.tokenUrl,
         {
@@ -41,7 +50,7 @@ export class Oauth2RefreshTokenRefresher implements TokenRefresher {
           client_id: state.clientId,
           client_secret: state.clientSecret,
         },
-        { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
+        { headers: { 'Content-Type': contentType } }
       );
 
       const expiresInSecs = response.data.expires_in || 3600;
