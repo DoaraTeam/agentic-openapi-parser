@@ -1,6 +1,6 @@
 {
   "name": "agentic-openapi-parser",
-  "version": "1.5.0",
+  "version": "1.6.0",
   "description": "A framework-agnostic TypeScript library for dynamic OpenAPI tool execution",
   "main": "dist/index.js",
   "module": "dist/index.mjs",
