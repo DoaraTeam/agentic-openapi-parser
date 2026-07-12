@@ -3,25 +3,39 @@ import { cosineSimilarity } from '@/utils';
 import { EmbeddingProviderError } from '@/errors';
 import { EmbeddingProvider } from './embedding-provider.interface';
 
-export interface SemanticToolIndexOptions {
-  /** Builds the text embedded for each tool. Defaults to "name description tag1 tag2 ...". */
-  buildText?: (tool: DynamicToolDefinition) => string;
+/** The minimum shape SemanticToolIndex needs — satisfied by DynamicToolDefinition, but also by a
+ *  tool object from any other source (an MCP server's tools/list, a hand-written tool, ...). */
+export interface SemanticTool {
+  name: string;
+  description: string;
+  tags?: string[];
 }
 
-interface IndexedTool {
-  tool: DynamicToolDefinition;
+export interface SemanticToolIndexOptions<T extends SemanticTool = DynamicToolDefinition> {
+  /** Builds the text embedded for each tool. Defaults to "name description tag1 tag2 ...". */
+  buildText?: (tool: T) => string;
+}
+
+interface IndexedTool<T> {
+  tool: T;
   embedding: number[];
 }
 
-function defaultBuildText(tool: DynamicToolDefinition): string {
+function defaultBuildText(tool: SemanticTool): string {
   const parts = [tool.name, tool.description, ...(tool.tags ?? [])];
   return parts.filter(Boolean).join(' ');
 }
 
 /**
- * Ranks tools by semantic similarity to a natural-language query, for specs large enough
- * (100-200+ tools) that even a well-tuned static filter (ToolFilterOptions) can't narrow the set
- * down for one specific user intent.
+ * Ranks tools by semantic similarity to a natural-language query, for tool sets large enough
+ * (100-200+) that even a well-tuned static filter (ToolFilterOptions) can't narrow the set down
+ * for one specific user intent.
+ *
+ * Generic over the tool shape (default DynamicToolDefinition, this library's own OpenAPI-derived
+ * type) — the ranking only ever reads name/description/tags, so the same index works unmodified
+ * for tools from any other source (an MCP server's tools/list, a hand-written tool registry, ...)
+ * as long as they satisfy SemanticTool. search() returns the exact objects passed to build(), so
+ * callers get back their own tool type, not a stripped-down stand-in.
  *
  * Deliberately does not call any embedding API itself — EmbeddingProvider is a bring-your-own-X
  * interface (same pattern as AccessTokenProvider/ResponseProcessor), so this library stays
@@ -29,19 +43,19 @@ function defaultBuildText(tool: DynamicToolDefinition): string {
  * used. This class only owns what's actually hard to get right: building the index once and
  * ranking many search() queries against it without re-embedding every tool per query.
  */
-export class SemanticToolIndex {
-  private indexed: IndexedTool[] = [];
-  private readonly buildText: (tool: DynamicToolDefinition) => string;
+export class SemanticToolIndex<T extends SemanticTool = DynamicToolDefinition> {
+  private indexed: IndexedTool<T>[] = [];
+  private readonly buildText: (tool: T) => string;
 
   constructor(
     private readonly embeddingProvider: EmbeddingProvider,
-    options: SemanticToolIndexOptions = {}
+    options: SemanticToolIndexOptions<T> = {}
   ) {
     this.buildText = options.buildText ?? defaultBuildText;
   }
 
   /** Embeds every tool and replaces the index. Call again to re-index after the tool set changes. */
-  async build(tools: DynamicToolDefinition[]): Promise<void> {
+  async build(tools: T[]): Promise<void> {
     if (tools.length === 0) {
       this.indexed = [];
       return;
@@ -66,7 +80,7 @@ export class SemanticToolIndex {
   }
 
   /** Returns up to topK tools ranked by similarity to the query. Empty if build() hasn't run yet, indexed 0 tools, or topK <= 0. */
-  async search(query: string, topK: number = 10): Promise<DynamicToolDefinition[]> {
+  async search(query: string, topK: number = 10): Promise<T[]> {
     if (this.indexed.length === 0 || topK <= 0) return [];
 
     const [queryEmbedding] = await this.embeddingProvider.embed([query]);

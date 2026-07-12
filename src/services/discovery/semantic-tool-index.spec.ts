@@ -128,6 +128,33 @@ describe('SemanticToolIndex', () => {
     await expect(index.build([getRefund, createInvoice])).rejects.toThrow(EmbeddingProviderError);
   });
 
+  it('works with a non-OpenAPI tool shape (e.g. an MCP server tools/list entry), returning the original objects', async () => {
+    interface McpLikeTool {
+      name: string;
+      description: string;
+      inputSchema: Record<string, unknown>;
+    }
+
+    const mcpTools: McpLikeTool[] = [
+      { name: 'search_docs', description: 'Full-text search over internal docs', inputSchema: {} },
+      { name: 'create_ticket', description: 'File a support ticket', inputSchema: {} },
+    ];
+
+    const embeddingProvider = fakeEmbeddingProvider({
+      'search_docs Full-text search over internal docs': [1, 0],
+      'create_ticket File a support ticket': [0, 1],
+      'find something in the docs': [1, 0],
+    });
+
+    const index = new SemanticToolIndex<McpLikeTool>(embeddingProvider);
+    await index.build(mcpTools);
+    const results = await index.search('find something in the docs', 1);
+
+    expect(results).toEqual([mcpTools[0]]);
+    // The exact same object reference comes back — not a stripped-down stand-in.
+    expect(results[0]).toBe(mcpTools[0]);
+  });
+
   it('re-indexing with build() replaces the previous index rather than appending to it', async () => {
     const embeddingProvider = fakeEmbeddingProvider({
       'getRefund Fetch a refund by id': [1, 0],
