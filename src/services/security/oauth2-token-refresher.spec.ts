@@ -53,13 +53,33 @@ describe('Oauth2RefreshTokenRefresher', () => {
       {
         grant_type: 'refresh_token',
         refresh_token: 'refresh-token',
+        refreshToken: 'refresh-token',
         client_id: 'client-id',
+        clientId: 'client-id',
         client_secret: 'client-secret',
+        clientSecret: 'client-secret',
       },
       { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
     );
     expect(result?.accessToken).toBe('new-token');
     expect(result?.refreshToken).toBe('new-refresh');
+  });
+
+  it('omits client_id/client_secret entirely (both conventions) when the provider has none — no client credentials required', async () => {
+    (axios.post as jest.Mock).mockResolvedValue({ data: { access_token: 'new-token', expires_in: 3600 } });
+    const refresher = new Oauth2RefreshTokenRefresher({ logger });
+
+    await refresher.refreshIfNeeded(futureState(1000, { clientId: undefined, clientSecret: undefined }));
+
+    expect(axios.post).toHaveBeenCalledWith(
+      expect.any(String),
+      {
+        grant_type: 'refresh_token',
+        refresh_token: 'refresh-token',
+        refreshToken: 'refresh-token',
+      },
+      expect.anything(),
+    );
   });
 
   it('calls onRefreshed with the new state after a successful refresh', async () => {
@@ -106,11 +126,99 @@ describe('Oauth2RefreshTokenRefresher', () => {
       {
         grant_type: 'refresh_token',
         refresh_token: 'refresh-token',
+        refreshToken: 'refresh-token',
         client_id: 'client-id',
+        clientId: 'client-id',
         client_secret: 'client-secret',
+        clientSecret: 'client-secret',
       },
       { headers: { 'Content-Type': 'application/json' } }
     );
     expect(result?.accessToken).toBe('new-token');
+  });
+
+  describe('lenient response parsing (non-SaaS / hand-rolled internal auth endpoints)', () => {
+    it('reads camelCase response fields when snake_case is absent', async () => {
+      (axios.post as jest.Mock).mockResolvedValue({
+        data: { accessToken: 'new-token', refreshToken: 'new-refresh', expiresIn: 1800 },
+      });
+      const refresher = new Oauth2RefreshTokenRefresher({ logger });
+
+      const result = await refresher.refreshIfNeeded(futureState(1000));
+
+      expect(result?.accessToken).toBe('new-token');
+      expect(result?.refreshToken).toBe('new-refresh');
+      expect(result?.tokenExpiresAt?.getTime()).toBeCloseTo(Date.now() + 1800 * 1000, -2);
+    });
+
+    it('unwraps a 1-level "data" envelope', async () => {
+      (axios.post as jest.Mock).mockResolvedValue({
+        data: { data: { access_token: 'new-token', expires_in: 900 } },
+      });
+      const refresher = new Oauth2RefreshTokenRefresher({ logger });
+
+      const result = await refresher.refreshIfNeeded(futureState(1000));
+
+      expect(result?.accessToken).toBe('new-token');
+    });
+
+    it('unwraps a 1-level "result" envelope (camelCase inside)', async () => {
+      (axios.post as jest.Mock).mockResolvedValue({
+        data: { result: { accessToken: 'new-token' } },
+      });
+      const refresher = new Oauth2RefreshTokenRefresher({ logger });
+
+      const result = await refresher.refreshIfNeeded(futureState(1000));
+
+      expect(result?.accessToken).toBe('new-token');
+    });
+
+    it('accepts expires_in as a numeric string', async () => {
+      (axios.post as jest.Mock).mockResolvedValue({
+        data: { access_token: 'new-token', expires_in: '900' },
+      });
+      const refresher = new Oauth2RefreshTokenRefresher({ logger });
+
+      const result = await refresher.refreshIfNeeded(futureState(1000));
+
+      expect(result?.tokenExpiresAt?.getTime()).toBeCloseTo(Date.now() + 900 * 1000, -2);
+    });
+
+    it('falls back to defaultExpiresInSecs when no expiry field is found anywhere', async () => {
+      (axios.post as jest.Mock).mockResolvedValue({ data: { access_token: 'new-token' } });
+      const refresher = new Oauth2RefreshTokenRefresher({ logger, defaultExpiresInSecs: 300 });
+
+      const result = await refresher.refreshIfNeeded(futureState(1000));
+
+      expect(result?.tokenExpiresAt?.getTime()).toBeCloseTo(Date.now() + 300 * 1000, -2);
+    });
+
+    it('fails cleanly (returns undefined, logs, does not store an empty accessToken) when no access token is found anywhere', async () => {
+      (axios.post as jest.Mock).mockResolvedValue({ data: { some_other_field: 'x' } });
+      const refresher = new Oauth2RefreshTokenRefresher({ logger });
+
+      const result = await refresher.refreshIfNeeded(futureState(1000));
+
+      expect(result).toBeUndefined();
+      expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('no access token found'));
+    });
+
+    it('lets responseAccessTokenPath/responseRefreshTokenPath/responseExpiresInPath override auto-detection for fully custom shapes', async () => {
+      (axios.post as jest.Mock).mockResolvedValue({
+        data: { payload: { token: { at: 'new-token', rt: 'new-refresh', ttl: 120 } } },
+      });
+      const refresher = new Oauth2RefreshTokenRefresher({
+        logger,
+        responseAccessTokenPath: 'payload.token.at',
+        responseRefreshTokenPath: 'payload.token.rt',
+        responseExpiresInPath: 'payload.token.ttl',
+      });
+
+      const result = await refresher.refreshIfNeeded(futureState(1000));
+
+      expect(result?.accessToken).toBe('new-token');
+      expect(result?.refreshToken).toBe('new-refresh');
+      expect(result?.tokenExpiresAt?.getTime()).toBeCloseTo(Date.now() + 120 * 1000, -2);
+    });
   });
 });
