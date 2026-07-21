@@ -1,0 +1,32 @@
+# Dependencies
+node_modules
+
+# Source code (Only dist/ is needed for production)
+src/
+tests/
+__tests__/
+*.spec.ts
+*.test.ts
+
+# Configuration and tooling
+.husky/
+.github/
+eslint.config.mjs
+eslint.config.js
+.eslintrc.js
+.eslintrc.json
+.prettierrc
+jest.config.js
+tsconfig.json
+tsup.config.ts
+vitest.config.ts
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# OS Files
+.DS_Store
+Thumbs.db

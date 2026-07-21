@@ -324,6 +324,96 @@ describe('DynamicToolExecutorService', () => {
     });
   });
 
+  // A caller-initiated cancellation (e.g. a user clicking "Stop" mid-request) must abort the
+  // underlying HTTP call right away and never trigger a retry — retrying after an intentional
+  // cancellation would keep firing requests the caller explicitly asked to stop.
+  describe('cancellation (AbortSignal)', () => {
+    const mockSpec = {
+      servers: [{ url: 'https://api.example.com' }],
+      paths: { '/users': { get: { operationId: 'getUsers' } } },
+    };
+
+    it('forwards the signal straight through to the underlying axios request config', async () => {
+      (axios as unknown as jest.Mock).mockResolvedValue({ data: { ok: true } });
+      const controller = new AbortController();
+
+      await service.execute(mockSpec, 'getUsers', {}, { signal: controller.signal });
+
+      expect(axios).toHaveBeenCalledWith(expect.objectContaining({ signal: controller.signal }));
+    });
+
+    it('rejects immediately without ever calling axios when the signal is already aborted before the call starts', async () => {
+      const controller = new AbortController();
+      controller.abort();
+
+      await expect(
+        service.execute(mockSpec, 'getUsers', {}, { signal: controller.signal }),
+      ).rejects.toThrow(/aborted/i);
+
+      expect(axios).not.toHaveBeenCalled();
+    });
+
+    it('does NOT retry after a cancellation, even though the retry policy would normally retry a network error', async () => {
+      const controller = new AbortController();
+      const cancelError = Object.assign(new Error('canceled'), { code: 'ERR_CANCELED' });
+      (axios as unknown as jest.Mock).mockImplementation(() => {
+        controller.abort();
+        return Promise.reject(cancelError);
+      });
+
+      await expect(
+        service.execute(mockSpec, 'getUsers', {}, {
+          signal: controller.signal,
+          retry: { maxRetries: 3, retryDelayMs: 1, retryOnNetworkError: true },
+        }),
+      ).rejects.toBe(cancelError);
+
+      // Exactly 1 call — no retry attempts fired after the cancellation.
+      expect(axios).toHaveBeenCalledTimes(1);
+    });
+
+    it('re-throws the original cancellation error as-is, NOT wrapped in ToolExecutionError (there is no real API failure to report)', async () => {
+      const controller = new AbortController();
+      const cancelError = Object.assign(new Error('canceled'), { code: 'ERR_CANCELED' });
+      (axios as unknown as jest.Mock).mockImplementation(() => {
+        controller.abort();
+        return Promise.reject(cancelError);
+      });
+
+      await expect(
+        service.execute(mockSpec, 'getUsers', {}, { signal: controller.signal }),
+      ).rejects.toBe(cancelError);
+    });
+
+    it('cuts short a pending retry backoff the moment the signal aborts, instead of waiting out the full delay', async () => {
+      jest.useFakeTimers();
+      try {
+        const controller = new AbortController();
+        const retryableError = { response: { status: 503, data: 'Service Unavailable' }, config: {} };
+        (axios as unknown as jest.Mock).mockRejectedValue(retryableError);
+
+        const promise = service.execute(mockSpec, 'getUsers', {}, {
+          signal: controller.signal,
+          retry: { maxRetries: 5, retryDelayMs: 10_000 },
+        });
+        const assertion = expect(promise).rejects.toThrow(/aborted/i);
+
+        // Let the first attempt fail and enter the backoff wait, then abort
+        // partway through what would otherwise be a 10s wait.
+        await Promise.resolve();
+        await Promise.resolve();
+        controller.abort();
+
+        await assertion;
+        // Only the first attempt fired — aborting during the backoff wait
+        // stopped it before a second attempt could ever be made.
+        expect(axios).toHaveBeenCalledTimes(1);
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+  });
+
   describe('observability hooks', () => {
     const mockSpec = {
       servers: [{ url: 'https://api.example.com' }],
