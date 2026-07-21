@@ -108,6 +108,8 @@ export interface ExecuteToolOptions {
   namespace?: string;
   /** Synchronous callbacks for wiring into an APM/tracing tool of the caller's choice. A throwing hook is caught and logged — it never fails the tool call. */
   hooks?: ObservabilityHooks;
+  /** Lets the caller cancel an in-flight tool call (e.g. a user-initiated "Stop") — aborts the underlying HTTP request immediately instead of waiting for it to finish or time out, and skips any further retry attempts. */
+  signal?: AbortSignal;
 }
 
 export interface IAiAdapter<TTool = unknown, TReturnType = TTool[]> {

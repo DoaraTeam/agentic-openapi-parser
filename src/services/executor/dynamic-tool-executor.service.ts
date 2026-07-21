@@ -59,7 +59,12 @@ export class DynamicToolExecutorService implements IDynamicToolExecutorService {
     }
 
     this.logger.debug?.(`[${method.toUpperCase()}] Requesting: ${requestUrl}`);
-    
+
+    const signal = options?.signal;
+    if (signal?.aborted) {
+      throw this.abortError();
+    }
+
     const reqConfig: AxiosRequestConfig = {
         method: method as AxiosRequestConfig['method'],
         url: requestUrl,
@@ -67,6 +72,7 @@ export class DynamicToolExecutorService implements IDynamicToolExecutorService {
         data: requestBody,
         headers,
         timeout: options?.timeout || 15000,
+        signal,
     };
 
     const requestId = randomUUID();
@@ -76,7 +82,7 @@ export class DynamicToolExecutorService implements IDynamicToolExecutorService {
 
     let response: AxiosResponse;
     try {
-      const send = () => this.sendWithRetry(reqConfig, toolName, options?.retry, requestId, hooks);
+      const send = () => this.sendWithRetry(reqConfig, toolName, options?.retry, requestId, hooks, signal);
       response = this.concurrencyLimiter ? await this.concurrencyLimiter.run(send) : await send();
     } catch (error: unknown) {
       this.invokeHook(hooks?.onRequestEnd, {
@@ -86,6 +92,11 @@ export class DynamicToolExecutorService implements IDynamicToolExecutorService {
         success: false,
         statusCode: (error as AxiosError).response?.status,
       });
+      // Caller cancelled (e.g. user-initiated "Stop") — this was never a real
+      // API failure, so it has no status/response to format meaningfully.
+      // Re-throw as-is instead of going through handleExecutionError(), which
+      // would otherwise report a misleading "Status undefined" API error.
+      if (this.isCancellation(error, signal)) throw error;
       this.handleExecutionError(error);
     }
 
@@ -123,7 +134,8 @@ export class DynamicToolExecutorService implements IDynamicToolExecutorService {
     toolName: string,
     retryOptions: RetryOptions | undefined,
     requestId: string,
-    hooks: ObservabilityHooks | undefined
+    hooks: ObservabilityHooks | undefined,
+    signal?: AbortSignal
   ): Promise<AxiosResponse> {
     const policy = new RetryPolicy(retryOptions);
     let attempt = 0;
@@ -132,6 +144,13 @@ export class DynamicToolExecutorService implements IDynamicToolExecutorService {
       try {
         return await axios(reqConfig);
       } catch (error: unknown) {
+        // Cancelled by the caller — not a retryable failure. Without this
+        // check, an aborted request (no HTTP response) looks identical to a
+        // network error to RetryPolicy, which retries network errors by
+        // default — meaning an intentional "Stop" would silently keep firing
+        // more requests instead of actually stopping.
+        if (this.isCancellation(error, signal)) throw error;
+
         const axiosError = error as AxiosError;
         const statusCode = axiosError.response?.status;
         if (!policy.shouldRetry(attempt, statusCode)) throw error;
@@ -140,14 +159,40 @@ export class DynamicToolExecutorService implements IDynamicToolExecutorService {
         const delayMs = policy.delayFor(attempt, retryAfterHeader !== undefined ? String(retryAfterHeader) : undefined);
         this.logger.warn(`Tool "${toolName}" attempt ${attempt + 1} failed (status ${statusCode ?? 'network error'}), retrying in ${Math.round(delayMs)}ms`);
         this.invokeHook(hooks?.onRetry, { requestId, toolName, attempt: attempt + 1, statusCode, delayMs });
-        await this.sleep(delayMs);
+        await this.sleep(delayMs, signal);
         attempt++;
       }
     }
   }
 
-  private sleep(ms: number): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, ms));
+  /** Rejects immediately if `signal` fires while sleeping, instead of waiting out the full backoff — so a caller-initiated cancellation between two retry attempts takes effect right away. */
+  private sleep(ms: number, signal?: AbortSignal): Promise<void> {
+    return new Promise((resolve, reject) => {
+      if (signal?.aborted) {
+        reject(this.abortError());
+        return;
+      }
+      const onAbort = () => {
+        clearTimeout(timer);
+        reject(this.abortError());
+      };
+      const timer = setTimeout(() => {
+        signal?.removeEventListener('abort', onAbort);
+        resolve();
+      }, ms);
+      signal?.addEventListener('abort', onAbort, { once: true });
+    });
+  }
+
+  /** True when `error` (or the signal itself) reflects a caller-initiated cancellation rather than a genuine request failure — covers both an aborted axios request and a rejection from this class's own `sleep()`. */
+  private isCancellation(error: unknown, signal?: AbortSignal): boolean {
+    if (signal?.aborted) return true;
+    if (axios.isCancel(error)) return true;
+    return (error as { code?: string } | undefined)?.code === 'ERR_CANCELED';
+  }
+
+  private abortError(): Error {
+    return new DOMException('The tool call was aborted', 'AbortError');
   }
 
   /** Runs a caller-supplied observability hook without letting it fail or block the tool call — a
